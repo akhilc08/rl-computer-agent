@@ -19,7 +19,9 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
+import objc
 import Quartz
+import torch
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -71,44 +73,48 @@ def main():
     rows = []
     with open(run / "sources.jsonl", "w") as f:
         for i, shot in enumerate(shots):
-            s = states[shot]
-            frame, scale = s["frame"], s["scale"]
-            img_path = run / shot
-            img = Image.open(img_path).convert("RGB")
-            cg = cgimage(img_path)
-            t0 = time.perf_counter()
-            ocr = ocr_lines(cg, frame)
-            t_ocr = ms(t0)
-            t0 = time.perf_counter()
-            ocr_fast = ocr_lines(cg, frame, fast=True)
-            t_fast = ms(t0)
-            t0 = time.perf_counter()
-            boxes = det.boxes(img, frame, scale)
-            t_det = ms(t0)
-            ax = [Element(**{**e, "frame": tuple(e["frame"]) if e.get("frame") else None}) for e in s["elements"]]
-            t0 = time.perf_counter()
-            items, need = merge(ax, ocr, boxes, frame)
-            t_merge = ms(t0)
-            t_cap = None
-            if shot in caption_set and need:
-                px = [(int((items[j].box[0] - frame[0]) * scale), int((items[j].box[1] - frame[1]) * scale),
-                       int((items[j].box[0] - frame[0] + items[j].box[2]) * scale),
-                       int((items[j].box[1] - frame[1] + items[j].box[3]) * scale)) for j in need]
+            # Vision/Quartz objects are autoreleased; without a pool per screenshot they pile up (29 GB once).
+            with objc.autorelease_pool():
+                s = states[shot]
+                frame, scale = s["frame"], s["scale"]
+                img_path = run / shot
+                img = Image.open(img_path).convert("RGB")
+                cg = cgimage(img_path)
                 t0 = time.perf_counter()
-                for j, text in zip(need, cap.captions(img, px)):
-                    items[j].label = text
-                t_cap = ms(t0)
-            row = {"shot": shot, "state": s["id"], "app": s["app"], "target": s["target"],
-                   "ms": {**s.get("ms", {}), "ocr_accurate": t_ocr, "ocr_fast": t_fast, "detect": t_det,
-                          "merge": t_merge, "caption": t_cap},
-                   "counts": {"ax": len(ax), "ocr": len(ocr), "ocr_fast": len(ocr_fast), "det": len(boxes),
-                              "merged": len(items), "icons_uncaptioned": len(need)},
-                   "items": [{"label": it.label, "role": it.role, "box": it.box, "sources": sorted(it.sources)}
-                             for it in items]}
-            f.write(json.dumps(row) + "\n")
-            rows.append(row)
-            if (i + 1) % 50 == 0:
-                print(f"{i + 1}/{len(shots)}", flush=True)
+                ocr = ocr_lines(cg, frame)
+                t_ocr = ms(t0)
+                t0 = time.perf_counter()
+                ocr_fast = ocr_lines(cg, frame, fast=True)
+                t_fast = ms(t0)
+                t0 = time.perf_counter()
+                boxes = det.boxes(img, frame, scale)
+                t_det = ms(t0)
+                ax = [Element(**{**e, "frame": tuple(e["frame"]) if e.get("frame") else None}) for e in s["elements"]]
+                t0 = time.perf_counter()
+                items, need = merge(ax, ocr, boxes, frame)
+                t_merge = ms(t0)
+                t_cap = None
+                if shot in caption_set and need:
+                    px = [(int((items[j].box[0] - frame[0]) * scale), int((items[j].box[1] - frame[1]) * scale),
+                           int((items[j].box[0] - frame[0] + items[j].box[2]) * scale),
+                           int((items[j].box[1] - frame[1] + items[j].box[3]) * scale)) for j in need]
+                    t0 = time.perf_counter()
+                    for j, text in zip(need, cap.captions(img, px)):
+                        items[j].label = text
+                    t_cap = ms(t0)
+                row = {"shot": shot, "state": s["id"], "app": s["app"], "target": s["target"],
+                       "ms": {**s.get("ms", {}), "ocr_accurate": t_ocr, "ocr_fast": t_fast, "detect": t_det,
+                              "merge": t_merge, "caption": t_cap},
+                       "counts": {"ax": len(ax), "ocr": len(ocr), "ocr_fast": len(ocr_fast), "det": len(boxes),
+                                  "merged": len(items), "icons_uncaptioned": len(need)},
+                       "items": [{"label": it.label, "role": it.role, "box": it.box, "sources": sorted(it.sources)}
+                                 for it in items]}
+                f.write(json.dumps(row) + "\n")
+                rows.append(row)
+                if (i + 1) % 50 == 0:
+                    if torch.backends.mps.is_available():
+                        torch.mps.empty_cache()
+                    print(f"{i + 1}/{len(shots)}", flush=True)
     summary = {}
     for key in ("app", "target"):
         groups = defaultdict(list)
