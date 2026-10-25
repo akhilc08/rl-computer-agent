@@ -1,6 +1,15 @@
 # Data
 
-Everything under `data/` is git-ignored. It exists only on akhilc08's Mac, so a fresh clone won't have it.
+Everything under `data/` is git-ignored. The source copy is on akhilc08's Mac, so a fresh clone won't have it.
+
+To get it, download the snapshot from the `data-20261025` release (376 MB, everything except `data/public/`) and unzip it at the repo root:
+
+```bash
+gh release download data-20261025 && unzip rlca-data-20261025.zip && rm rlca-data-20261025.zip
+scripts/data/download_public.sh   # public datasets, 13 GB
+```
+
+The release is a point-in-time copy. Newer runs only exist locally until a new release is cut.
 
 ## What's there (as of 2026-10-25)
 
@@ -17,6 +26,6 @@ Not downloaded yet: Multimodal-Mind2Web and AndroidControl (about 64 GB). The pl
 
 ## Privacy
 
-`data/explore/`, `data/snapshots/` and `data/source_eval/` come from the owner's personal accounts and contain real emails, chats, calendars and repos. Don't commit them, upload them, or share screenshots from them. If you need examples, ask the owner. Anything going to AWS for training needs the owner's sign-off first.
+`data/explore/`, `data/snapshots/` and `data/source_eval/` come from the owner's personal accounts and contain real emails, chats, calendars and repos. They're shared with the team through the private release only. Don't commit them, re-upload them anywhere else, or share screenshots outside the team. Anything going to AWS for training needs the owner's sign-off first.
 
 The public datasets in `data/public/` are fine to download yourself with the script.
