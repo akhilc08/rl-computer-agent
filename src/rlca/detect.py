@@ -34,10 +34,16 @@ class Detector:
         return out
 
 
+CROP_TOKENS = 5
+
+
 class Captioner:
     def __init__(self, dtype=torch.float16):
         from transformers import AutoProcessor, Florence2ForConditionalGeneration
         self.processor = AutoProcessor.from_pretrained(CAPTION_DIR)
+        # Crops go in at 64x64 (no resize, as OmniParser does): DaViT's 32x downsampling leaves a 2x2 grid
+        # plus one pooled token, so the prompt needs 5 image placeholders, not the 577 of a 768x768 image.
+        self.processor.num_image_tokens = CROP_TOKENS - self.processor.num_additional_image_tokens
         self.model = Florence2ForConditionalGeneration.from_pretrained(CAPTION_DIR, dtype=dtype).to(device()).eval()
         self.dtype = dtype
 
@@ -48,7 +54,9 @@ class Captioner:
         out = []
         for i in range(0, len(crops), batch):
             chunk = crops[i:i + batch]
-            enc = self.processor(text=["<CAPTION>"] * len(chunk), images=chunk, return_tensors="pt").to(device())
+            # 64x64 crops as-is, like OmniParser: the default resize to 768x768 costs ~150x the memory and time.
+            enc = self.processor(text=["<CAPTION>"] * len(chunk), images=chunk, return_tensors="pt",
+                                 do_resize=False).to(device())
             enc["pixel_values"] = enc["pixel_values"].to(self.dtype)
             ids = self.model.generate(**enc, max_new_tokens=max_new_tokens, num_beams=1, do_sample=False)
             out += [t.strip() for t in self.processor.batch_decode(ids, skip_special_tokens=True)]

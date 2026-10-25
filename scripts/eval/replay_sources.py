@@ -111,9 +111,9 @@ def main():
                                  for it in items]}
                 f.write(json.dumps(row) + "\n")
                 rows.append(row)
+                if torch.backends.mps.is_available():
+                    torch.mps.empty_cache()
                 if (i + 1) % 50 == 0:
-                    if torch.backends.mps.is_available():
-                        torch.mps.empty_cache()
                     print(f"{i + 1}/{len(shots)}", flush=True)
     summary = {}
     for key in ("app", "target"):
