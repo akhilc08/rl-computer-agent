@@ -1,0 +1,33 @@
+Writing labelled commands for one screen
+=========================================
+
+You get one screen: the app, title, URL, and the numbered options Kev would choose from
+(w = accessibility element, o = OCR text, d = detector icon, m = menu-bar item). Write about 20
+commands a person might say to a voice assistant on that screen, one JSON object per line:
+
+{"command": "...", "style": "casual|planner", "verb": "click|select|toggle|type|open_menu_item",
+ "targets": ["w41"], "text": null, "text_source": null,
+ "irreversible": false, "ambiguous": false, "absent": false}
+
+style
+  casual   ~12 per screen. How people talk: short, lowercase, vague nouns ("open the todoist one",
+           "next page", "star that"). Mix literal wording with paraphrases that don't reuse the label.
+  planner  ~8 per screen. What a planning LLM would send: one explicit step ("Click the Older button
+           to load the next page of messages.").
+
+targets   EVERY option that would correctly carry out the command, best first (a row and its title cell
+          both count). Prefer w over o/d/m when they're the same thing.
+verb      click (buttons, links, rows), select (tabs, radio buttons, list items), toggle (checkboxes,
+          star/flag cells, switches), type (text fields), open_menu_item (m* items).
+type      set "text" to what goes in the field, and text_source "user" when the user said the words
+          ("search for cornell cs") or "compose" when an LLM has to write them ("reply saying I'll be late").
+irreversible  true when doing it can't be undone or other people see it: send, post, comment, delete,
+          buy/place order, submit, merge, archive someone else's thing, sign out. Include a couple per
+          screen when the screen has such controls; never invent ones that aren't there.
+ambiguous true when 2+ options fit and the command doesn't say which ("open the kevin hua email" with
+          three of them). List all of them in targets. About 15% of commands.
+absent    true when the right control isn't on this screen ("reply to simon" in the inbox list).
+          targets []. About 10% of commands.
+
+Rules: only use ids that are in the option list. Don't copy private message text into commands beyond
+what's needed to name the item (a sender name or subject word is fine). No two commands alike.
