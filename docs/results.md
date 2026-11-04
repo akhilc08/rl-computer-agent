@@ -92,7 +92,8 @@ So real targets per screen are roughly AX 40 + OCR 2.6 + detector 5.1, about 18%
 
 ### Takeaways
 
-- **AX + fast OCR in parallel is the default.** It gives up to 36% more options with no extra wait.
-- **The detector costs more than Kev itself.** Only run it when the AX list looks thin, as on Calendar and Canvas.
+- **AX + fast OCR in parallel is still the default.** It's free in wall time, but only about 6% more real targets, so OCR needs a short-line filter to keep the noise out of Kev's list.
+- **The detector finds more real targets than OCR (5 vs 2.6 per screen) but costs 270 ms**, more than Kev itself. Run it when AX has no web area or the list looks thin, not on every screen.
+- **Fixing the missing AX web area is the bigger win.** That's where most of the real extras come from.
 - **Captions are weak on brand logos**, so icon text from the captioner can't be trusted alone.
-- **claude.ai gives about 1 AX option per screen.** This needs investigating, possibly because Chromium didn't build the AX tree for the off-screen window.
+- **claude.ai never finished loading in the background window.** The explorer needs to wait for it, or skip it.
