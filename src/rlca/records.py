@@ -43,6 +43,17 @@ def element_criteria(options):
     return crit
 
 
+def option_texts(options):
+    """The option strings Kev sees for the element question, exactly as kev.api renders criteria ("name: description"),
+    so serving and eval pass the same text the model was trained on."""
+    return [f"{k}: {v}" for k, v in element_criteria(options).items()]
+
+
+def option_ids(options):
+    """Option ids in the same order as option_texts; None for the "none" option."""
+    return [o["id"] for o in options] + [None]
+
+
 def state_text(app, command):
     # The "state" layout: best for both sizes in the untrained baseline (the window title pulled answers toward itself).
     return f"App: {app}\nUser command: {command}"

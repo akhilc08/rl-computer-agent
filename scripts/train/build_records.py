@@ -8,6 +8,8 @@ Splits:
   train / val      Mac labels (val = ~10% of screens, by screen) + OmniACT train / val + OS-Atlas
   heldout_site     every Mac command on the --heldout_sites sites (never trained on; the generalisation test)
   eval_ssv2 / eval_sspro / eval_omniact   public benchmarks and OmniACT's test split
+  eval_synthetic   the 300 synthetic commands the untrained baseline was first scored on
+  train_mix        train with --cap applied and Mac labels repeated --mac_repeat times (what the run trains on)
 
 Examples whose target didn't make it into the option list (menu prefilter or the 254-option cap) are
 dropped from training and counted, since Kev can't get them right however it's trained.
@@ -18,6 +20,7 @@ import argparse
 import glob
 import hashlib
 import json
+import random
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -76,6 +79,36 @@ def mac_records(heldout_sites, prefilter):
                                 meta={"source": "mac_labels", "id": c["id"], "screen": s["id"], "site": site, "style": c["style"]})
 
 
+def synthetic_records(prefilter):
+    """The 300-command synthetic set the untrained baseline was scored on, as eval records (before/after on the same set)."""
+    for line in open(ROOT / "data/synthetic/baseline_v0.jsonl"):
+        ex = json.loads(line)
+        snap = json.load(open(ROOT / "data/snapshots" / ex["snapshot"]))
+        screen = {"options": [{**e, "box": e.get("frame")} for e in snap["elements"] if e["source"] == "window" or e.get("enabled", True)]}
+        opts = mac_options(screen, ex["command"], prefilter)
+        targets = [ex["target_id"]] if ex.get("target_id") else []
+        if targets and targets[0] not in {o["id"] for o in opts}:
+            yield "dropped_prefilter", None
+            continue
+        yield "eval_synthetic", record(snap["app"], ex["command"], opts, targets, action=ex.get("verb"),
+                                       meta={"source": "synthetic_v0", "id": ex["id"], "style": ex.get("style")})
+
+
+def mix(train, caps, mac_repeat, seed=0):
+    """Training mix: cap the big literal-instruction sets so they don't drown the Mac labels, and repeat the Mac labels."""
+    rng = random.Random(seed)
+    by_src = defaultdict(list)
+    for r in train:
+        by_src[r["_meta"]["source"]].append(r)
+    out = []
+    for src, recs in by_src.items():
+        if src in caps and len(recs) > caps[src]:
+            recs = rng.sample(recs, caps[src])
+        out += recs * (mac_repeat if src == "mac_labels" else 1)
+    rng.shuffle(out)
+    return out
+
+
 def public_records():
     split_names = {"screenspot_v2": {"eval": "eval_ssv2"}, "screenspot_pro": {"eval": "eval_sspro"},
                    "omniact": {"train": "train", "val": "val", "test": "eval_omniact"}}
@@ -111,12 +144,15 @@ def public_records():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--heldout_sites", default="neetcode", help="comma-separated Mac sites/apps kept out of training")
+    ap.add_argument("--cap", default="os_atlas_macos=6000,os_atlas_linux=6000", help="per-source caps for train_mix.jsonl")
+    ap.add_argument("--mac_repeat", type=int, default=2, help="times each Mac label appears in train_mix.jsonl")
     args = ap.parse_args()
     held = set(filter(None, args.heldout_sites.split(",")))
     OUT.mkdir(parents=True, exist_ok=True)
     counts = Counter()
     by_split = defaultdict(list)
-    for split, rec in [*mac_records(held, MenuPrefilter()), *public_records()]:
+    prefilter = MenuPrefilter()
+    for split, rec in [*mac_records(held, prefilter), *synthetic_records(prefilter), *public_records()]:
         counts[split] += 1
         if rec is not None:
             by_split[split].append(rec)
@@ -124,6 +160,12 @@ def main():
         with open(OUT / f"{split}.jsonl", "w") as f:
             for r in recs:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    caps = {k: int(v) for k, v in (kv.split("=") for kv in filter(None, args.cap.split(",")))}
+    train_mix = mix(by_split["train"], caps, args.mac_repeat)
+    with open(OUT / "train_mix.jsonl", "w") as f:
+        for r in train_mix:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    by_split["train_mix"] = train_mix
     src = Counter((s, r["_meta"]["source"]) for s, recs in by_split.items() for r in recs)
     for (s, name), n in sorted(src.items()):
         print(f"{s:14s} {name:16s} {n:6d}")

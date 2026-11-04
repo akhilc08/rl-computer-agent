@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 from rlca.candidates import NONE_OPTION, MenuPrefilter, build_candidates, load_elements  # noqa: E402
 from rlca.kev_backend import LAYOUTS, build_prompt, load_kev, score_options  # noqa: E402
+from rlca.records import option_ids, option_texts  # noqa: E402
 
 
 def ece(confs, correct, bins=10):
@@ -77,6 +78,8 @@ def main():
     ap.add_argument("--menu_k", type=int, default=40)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--layout", default="state_title", choices=LAYOUTS)
+    ap.add_argument("--option_format", default="records", choices=("records", "describe"),
+                    help="records: id-prefixed options as in training (default); describe: the original baseline text")
     args = ap.parse_args()
 
     examples = [json.loads(line) for line in open(args.data)]
@@ -93,8 +96,10 @@ def main():
             snapshots[ex["snapshot"]] = json.loads((ROOT / "data/snapshots" / ex["snapshot"]).read_text())
         snap = snapshots[ex["snapshot"]]
         cands = build_candidates(ex["command"], load_elements(snap), prefilter, menu_k=args.menu_k)
-        ids = [e.id for e in cands] + [None]
-        options = [e.describe() for e in cands] + [NONE_OPTION]
+        opts = [{"id": e.id, "role": e.role, "label": e.label, "context": e.context, "enabled": e.enabled} for e in cands]
+        ids = option_ids(opts)
+        # Same option text as the training records (id: description), so trained checkpoints can be scored here too.
+        options = option_texts(opts) if args.option_format == "records" else [e.describe() for e in cands] + [NONE_OPTION]
         state, instr = build_prompt(snap["app"], snap["window_title"], ex["command"], args.layout)
 
         probs, ms, tokens = score_options(tok, model, state, options, instr)
@@ -116,7 +121,7 @@ def main():
                   f"p50={sorted(r['ms'] for r in rows)[len(rows) // 2]:.0f}ms", flush=True)
 
     summary = summarize(rows)
-    summary.update(run=args.run, bits=args.bits, menu_k=args.menu_k, layout=args.layout,
+    summary.update(run=args.run, bits=args.bits, menu_k=args.menu_k, layout=args.layout, option_format=args.option_format,
                    peak_memory_gb=mx.get_peak_memory() / 1e9)
     out = ROOT / "data/results" / args.name
     out.mkdir(parents=True, exist_ok=True)
