@@ -39,8 +39,8 @@ def frac(key, salt="val"):
 
 def mac_options(screen, command, prefilter):
     """Serving's option list for one command: page/window items, then the top MENU_K menu items."""
-    page = [o for o in screen["options"] if not o["id"].startswith("m")]
-    menu = [o for o in screen["options"] if o["id"].startswith("m")]
+    page = [o for o in screen["options"] if o["source"] != "menubar"]
+    menu = [o for o in screen["options"] if o["source"] == "menubar"]
     if menu:
         els = [Element(id=o["id"], source="menubar", role=o["role"], label=o["label"], context=o["context"]) for o in menu]
         scores = prefilter.scores(command, els)

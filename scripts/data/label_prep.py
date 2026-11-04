@@ -24,8 +24,8 @@ def page_key(state):
     return state["target"], state["url"].split("#")[0].split("?")[0]
 
 
-def option(eid, e):
-    return {"id": eid, "role": e["role"], "label": e["label"], "context": e.get("context", []),
+def option(eid, e, source):
+    return {"id": eid, "source": source, "role": e["role"], "label": e["label"], "context": e.get("context", []),
             "enabled": e.get("enabled", True), "box": e.get("frame") or e.get("box")}
 
 
@@ -45,7 +45,7 @@ def explore_screens(run):
         if k not in seen or (s["shot"] in sources and seen[k]["shot"] not in sources):
             seen[k] = s
     for s in seen.values():
-        opts = [option(e["id"], e) for e in s["elements"]]
+        opts = [option(e["id"], e, "window") for e in s["elements"]]
         extras = sources.get(s["shot"], {}).get("items", [])
         no, nd = 0, 0
         for it in extras:
@@ -54,13 +54,13 @@ def explore_screens(run):
             if "ocr" in it["sources"]:
                 if len(it["label"].split()) > MAX_OCR_WORDS:
                     continue
-                opts.append(option(f"o{no}", {**it, "role": "text"}))
+                opts.append(option(f"o{no}", {**it, "role": "text"}, "ocr"))
                 no += 1
             else:
-                opts.append(option(f"d{nd}", {**it, "role": "icon"}))
+                opts.append(option(f"d{nd}", {**it, "role": "icon"}, "det"))
                 nd += 1
         # Explorer states number menu items per menu (m0 in Arc and m0 in File), so renumber them.
-        opts += [option(f"m{i}", e) for i, e in enumerate(e for e in s.get("menubar", []) if e.get("enabled", True))]
+        opts += [option(f"m{i}", e, "menubar") for i, e in enumerate(e for e in s.get("menubar", []) if e.get("enabled", True))]
         yield {"id": f"{run.name}-{s['id']}", "kind": "explore", "app": s["app"], "site": s["target"],
                "url": s["url"], "title": s.get("title"), "shot": str((run / s["shot"]).relative_to(ROOT)), "options": opts}
 
@@ -68,7 +68,7 @@ def explore_screens(run):
 def snapshot_screens():
     for f in sorted((ROOT / "data/snapshots").glob("*.json")):
         snap = json.load(open(f))
-        opts = [option(e["id"], e) for e in snap["elements"] if e["source"] == "window" or e.get("enabled", True)]
+        opts = [option(e["id"], e, e["source"]) for e in snap["elements"] if e["source"] == "window" or e.get("enabled", True)]
         yield {"id": f"snap-{f.stem}", "kind": "snapshot", "app": snap["app"], "site": None, "url": None,
                "title": snap.get("window_title"), "shot": None, "options": opts}
 
@@ -80,7 +80,7 @@ def render(screen):
         lines.append(f"URL: {screen['url']}")
     menus = {}
     for o in screen["options"]:
-        if o["id"].startswith("m"):
+        if o["source"] == "menubar":
             menus.setdefault(" › ".join(o["context"]) or "?", []).append(f"{o['id']} {o['label']}")
             continue
         role = o["role"].removeprefix("AX").lower()
