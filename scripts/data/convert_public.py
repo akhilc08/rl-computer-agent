@@ -19,8 +19,10 @@ training. ScreenSpot v1 is skipped (v2 is its corrected re-release).
 import argparse
 import glob
 import json
+import os
 import re
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -188,6 +190,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--set", required=True, choices=SETS)
     ap.add_argument("--limit", type=int, default=0, help="stop after this many screenshots (for a quick check)")
+    ap.add_argument("--image_timeout", type=float, default=120, help="seconds before a hung screenshot ends the run")
     args = ap.parse_args()
     import objc
     import torch
@@ -205,11 +208,21 @@ def main():
     print(f"{len(examples)} examples, {len(screens)} screenshots done, {len(todo)} to do", flush=True)
     if todo:
         get = Elements()
+        pending = out / "pending.txt"     # the image in progress; still here after a hang means that image hung
         with open(out / "screens.jsonl", "a") as f:
             for i, rel in enumerate(todo):
-                # Vision objects are autoreleased: without a pool per image they pile up (29 GB once in the replay).
-                with objc.autorelease_pool():
-                    s = {"image": rel, **get(PUB / rel)}
+                if pending.exists() and pending.read_text() == rel:
+                    s = {"image": rel, "size": None, "elements": [], "error": "hung on a previous run"}
+                else:
+                    pending.write_text(rel)
+                    # Vision OCR has deadlocked on one 4K screenshot; exit so a rerun can skip it.
+                    watchdog = threading.Timer(args.image_timeout, lambda: os._exit(3))
+                    watchdog.start()
+                    # Vision objects are autoreleased: without a pool per image they pile up (29 GB once in the replay).
+                    with objc.autorelease_pool():
+                        s = {"image": rel, **get(PUB / rel)}
+                    watchdog.cancel()
+                pending.unlink(missing_ok=True)
                 f.write(json.dumps(s) + "\n")
                 f.flush()
                 screens[rel] = s
@@ -224,6 +237,8 @@ def main():
             if rel not in screens:
                 continue
             s = screens[rel]
+            if not s["size"]:
+                continue
             W, H = s["size"]
             if "gt_norm" in ex:
                 x1, y1, x2, y2 = ex.pop("gt_norm")
