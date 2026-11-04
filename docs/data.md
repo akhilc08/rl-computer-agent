@@ -19,6 +19,8 @@ The release is a point-in-time copy. Newer runs only exist locally until a new r
 | `data/source_eval/` | 8 MB | AX vs OCR vs detector comparison (`sources.jsonl`, `sources_summary.json`) | `scripts/eval/replay_sources.py`, `compare_sources.py` |
 | `data/public/` | 13 GB | ScreenSpot v1/v2/Pro, OmniACT, OS-Atlas macOS+Linux | `scripts/data/download_public.sh` |
 | `data/converted/` | | Public sets in Kev's element-list format: `screens.jsonl` (OCR + detector elements per screenshot) and `examples.jsonl` (instruction, action, target element ids, split). ScreenSpot-v2/Pro are split `eval` only. | `scripts/data/convert_public.py --set <name>` (macOS, about 1 s per screenshot) |
+| `data/labels/` | | 7,295 labelled voice commands on 325 Mac screens (one per distinct explored page plus the native-app snapshots): all correct targets, action, typed text and its source, irreversible / ambiguous / absent flags, casual and planner styles. Written by Claude agents under `scripts/data/label_guide.txt`. | `scripts/data/label_prep.py`, then labelling, then `scripts/data/label_check.py` |
+| `data/records/` | | Kev training/eval requests built from the labels and converted public sets (`train`, `val`, `heldout_site` = NeetCode, `eval_ssv2`, `eval_sspro`, `eval_omniact`) | `scripts/train/build_records.py` (run with `.vendor/kev/.venv/bin/python`) |
 | `data/results/` | <1 MB | Kev 0.8B / 4B baseline outputs | `scripts/baseline/run_kev_baseline.py` |
 | `data/snapshots/` | <1 MB | AX snapshots of native apps | `scripts/data/capture_snapshots.py` |
 | `data/synthetic/` | <1 MB | `baseline_v0.jsonl` synthetic commands | not scripted yet |
