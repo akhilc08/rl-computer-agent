@@ -1,6 +1,6 @@
 """Build Kev training and eval records from our labelled Mac commands and the converted public sets.
 
-Mac labels (data/labels/commands.jsonl + parts/part_*.jsonl) get every question: element, action, text
+Mac labels (data/labels/commands.jsonl + parts/part_*.jsonl, with parts/review_*.jsonl corrections) get every question: element, action, text
 source, irreversible, ambiguous. Option lists follow serving: all window/page items, then the menu-bar
 items the prefilter ranks highest for that command, then "none". Public sets get element and action only.
 
@@ -51,9 +51,16 @@ def mac_options(screen, command, prefilter):
 def mac_records(heldout_sites, prefilter):
     screens = {json.loads(l)["id"]: json.loads(l) for l in open(ROOT / "data/labels/screens.jsonl")}
     files = [ROOT / "data/labels/commands.jsonl", *sorted(glob.glob(str(ROOT / "data/labels/parts/part_*.jsonl")))]
+    # Audit corrections (parts/review_*.jsonl) replace the original row with the same id.
+    fixes = {}
+    for f in sorted(glob.glob(str(ROOT / "data/labels/parts/review_*.jsonl"))):
+        for line in open(f):
+            r = json.loads(line)
+            fixes[r["id"]] = r
     for f in files:
         for line in open(f):
             c = json.loads(line)
+            c = fixes.get(c["id"], c)
             s = screens[c["screen"]]
             opts = mac_options(s, c["command"], prefilter)
             ids = {o["id"] for o in opts}

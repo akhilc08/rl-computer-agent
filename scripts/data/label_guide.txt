@@ -22,10 +22,16 @@ verb      click (buttons, links, rows), select (tabs, radio buttons, list items)
 type      set "text" to what goes in the field, and text_source "user" when the user said the words
           ("search for cornell cs") or "compose" when an LLM has to write them ("reply saying I'll be late").
 irreversible  true when doing it can't be undone or other people see it: send, post, comment, delete,
-          buy/place order, submit, merge, archive someone else's thing, sign out. Include a couple per
+          buy/place order, submit, merge, archive someone else's thing, sign out. Only when THIS click does
+          it: a button that just opens a form or a submenu (Fork opening the fork page, a "Sign Out" submenu)
+          is not irreversible. Include a couple per
           screen when the screen has such controls; never invent ones that aren't there.
-ambiguous true when 2+ options fit and the command doesn't say which ("open the kevin hua email" with
-          three of them). List all of them in targets. About 15% of commands.
+ambiguous true only when 2+ options fit AND they lead to DIFFERENT outcomes, so acting without asking
+          could do the wrong thing ("open the kevin hua email" with three different emails). List all of
+          them in targets. Two options that do the same thing (a breadcrumb and a sidebar link to one page,
+          a row and its title cell, "Pro" and "Get Pro") are NOT ambiguous: list both in targets, ambiguous
+          false. If one option matches the command clearly better ("container docs" -> Container registry,
+          not Docker registry), it's not ambiguous: target that one. "first"/"second" pick one by position.
 absent    true when the right control isn't on this screen ("reply to simon" in the inbox list).
           targets []. About 10% of commands.
 
