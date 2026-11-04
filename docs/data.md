@@ -18,6 +18,7 @@ The release is a point-in-time copy. Newer runs only exist locally until a new r
 | `data/explore/` | 585 MB | Explorer runs: screenshots, AX trees, and actions on real logged-in sites (Gmail, GitHub, Google, Amazon, Docs, Calendar, Canvas, NeetCode, claude.ai). The main run, `20261025-124135`, has 2,835 states and 712 unique screenshots. | `scripts/data/explore.py` / `overnight.sh`. It needs the owner's accounts, so it can't really be recreated. |
 | `data/source_eval/` | 8 MB | AX vs OCR vs detector comparison (`sources.jsonl`, `sources_summary.json`) | `scripts/eval/replay_sources.py`, `compare_sources.py` |
 | `data/public/` | 13 GB | ScreenSpot v1/v2/Pro, OmniACT, OS-Atlas macOS+Linux | `scripts/data/download_public.sh` |
+| `data/converted/` | | Public sets in Kev's element-list format: `screens.jsonl` (OCR + detector elements per screenshot) and `examples.jsonl` (instruction, action, target element ids, split). ScreenSpot-v2/Pro are split `eval` only. | `scripts/data/convert_public.py --set <name>` (macOS, about 1 s per screenshot) |
 | `data/results/` | <1 MB | Kev 0.8B / 4B baseline outputs | `scripts/baseline/run_kev_baseline.py` |
 | `data/snapshots/` | <1 MB | AX snapshots of native apps | `scripts/data/capture_snapshots.py` |
 | `data/synthetic/` | <1 MB | `baseline_v0.jsonl` synthetic commands | not scripted yet |
