@@ -2,7 +2,7 @@
 # Untrained evals, then SFT of Kev 0.8B, then trained evals. Logs to ~/pipeline.log, one line per stage.
 set -u
 cd ~/kev
-export KEV_PAD_BUCKET=256
+export KEV_PAD_BUCKET=256 KEV_EVAL_CONTEXT=serving
 R=../rlca/data/records
 SETS="eval_synthetic val heldout_site eval_ssv2 eval_omniact eval_sspro"
 evals() {   # evals <run> <outdir>
