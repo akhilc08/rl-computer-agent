@@ -10,11 +10,11 @@ data/converted/<set>/examples.jsonl (one row per instruction: target element ids
 Examples whose target no element covers are kept with "target_ids": [], which measures how often the
 pixel sources miss the target. Resumable: screenshots already in screens.jsonl are skipped.
 
-ScreenSpot-v2 and ScreenSpot-Pro are public benchmarks, so they get split "eval" and stay out of
-training. ScreenSpot v1 is skipped (v2 is its corrected re-release).
+ScreenSpot-v2, ScreenSpot-Pro, OSWorld-G and MMBench-GUI (level 2) are public benchmarks, so they get split
+"eval" and stay out of training. ScreenSpot v1 is skipped (v2 is its corrected re-release).
 
   .venv/bin/python scripts/data/convert_public.py --set screenspot_v2 [--limit 20]
-  sets: screenspot_v2 screenspot_pro omniact os_atlas_macos os_atlas_linux
+  sets: screenspot_v2 screenspot_pro omniact os_atlas_macos os_atlas_linux osworld_g mmbench_gui
 """
 import argparse
 import glob
@@ -51,6 +51,26 @@ def screenspot_pro():
             yield {"id": f"sspro-{r['id']}", "image": d / "images" / r["img_filename"], "split": "eval",
                    "platform": r.get("platform"), "app": r.get("application"), "instruction": r["instruction"],
                    "action": "click", "gt_box": xywh(*r["bbox"]), "ui_type": r.get("ui_type")}
+
+
+def osworld_g():
+    d = PUB / "osworld_g"     # annotations.json + images/ extracted from the HF parquet
+    for r in json.load(open(d / "annotations.json")):
+        c = r["box_coordinates"]
+        if r["box_type"] == "polygon":      # x, y pairs: their bounding rectangle
+            xs, ys = c[0::2], c[1::2]
+            c = xywh(min(xs), min(ys), max(xs), max(ys))
+        yield {"id": f"osworldg-{r['id']}", "image": d / "images" / r["image_path"], "split": "eval", "platform": "linux",
+               "instruction": r["instruction"], "action": "click", "gt_box": [round(v) for v in c], "ui_type": r["GUI_types"]}
+
+
+def mmbench_gui():
+    """Level 2 (element grounding) only; boxes are normalised x1, y1, x2, y2."""
+    d = PUB / "mmbench_gui"
+    for r in json.load(open(d / "L2_annotations.json")):
+        yield {"id": f"mmbench-{r['index']}", "image": d / "offline_images" / r["platform"] / r["image_path"], "split": "eval",
+               "platform": r["platform"].removeprefix("os_"), "app": r.get("app_name"), "instruction": r["instruction"],
+               "action": "click", "gt_norm": r["bbox"], "ui_type": r.get("data_type"), "grounding": r.get("grounding_type")}
 
 
 ACT = re.compile(r"pyautogui\.(click|doubleClick|rightClick|moveTo|write|press|hotkey)\((.*)\)")
@@ -119,7 +139,8 @@ def os_atlas(plat):
 
 
 SETS = {"screenspot_v2": screenspot_v2, "screenspot_pro": screenspot_pro, "omniact": omniact,
-        "os_atlas_macos": lambda: os_atlas("macos"), "os_atlas_linux": lambda: os_atlas("linux")}
+        "os_atlas_macos": lambda: os_atlas("macos"), "os_atlas_linux": lambda: os_atlas("linux"),
+        "osworld_g": osworld_g, "mmbench_gui": mmbench_gui}
 
 
 class Elements:

@@ -5,11 +5,17 @@ source, irreversible, ambiguous. Option lists follow serving: all window/page it
 items the prefilter ranks highest for that command, then "none". Public sets get element and action only.
 
 Splits:
-  train / val      Mac labels (val = ~10% of screens, by screen) + OmniACT train / val + OS-Atlas
+  train            Mac labels + OS-Atlas
+  val              Mac labels only (~10% of screens, by screen)
   heldout_site     every Mac command on the --heldout_sites sites (never trained on; the generalisation test)
-  eval_ssv2 / eval_sspro / eval_omniact   public benchmarks and OmniACT's test split
+  eval_ssv2 / eval_sspro / eval_osworldg / eval_mmbench   the standard grounding benchmarks
+  eval_omniact     all of OmniACT (native Mac apps); its splits share screens, so none of it is trained on
   eval_synthetic   the 300 synthetic commands the untrained baseline was first scored on
   train_mix        train with --cap applied and Mac labels repeated --mac_repeat times (what the run trains on)
+
+Training screens that look like any benchmark screen (perceptual hash within --dup_bits of 256) are dropped,
+so a near-copy of a benchmark screenshot can't leak in through another dataset (OS-Atlas shares screens with
+ScreenSpot-v2).
 
 Examples whose target didn't make it into the option list (menu prefilter or the 254-option cap) are
 dropped from training and counted, since Kev can't get them right however it's trained.
@@ -30,6 +36,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from rlca.candidates import MAX_OPTIONS, MenuPrefilter  # noqa: E402
 from rlca.elements import Element  # noqa: E402
 from rlca.records import record  # noqa: E402
+
+PUB = ROOT / "data/public"
 
 OUT = ROOT / "data/records"
 MENU_K = 40
@@ -109,19 +117,62 @@ def mix(train, caps, mac_repeat, seed=0):
     return out
 
 
-def public_records():
-    split_names = {"screenspot_v2": {"eval": "eval_ssv2"}, "screenspot_pro": {"eval": "eval_sspro"},
-                   "omniact": {"train": "train", "val": "val", "test": "eval_omniact"}}
-    for name in ("screenspot_v2", "screenspot_pro", "omniact", "os_atlas_macos", "os_atlas_linux"):
+BENCHMARKS = {"screenspot_v2": "eval_ssv2", "screenspot_pro": "eval_sspro", "osworld_g": "eval_osworldg",
+              "mmbench_gui": "eval_mmbench", "omniact": "eval_omniact"}
+TRAIN_SETS = ("os_atlas_macos", "os_atlas_linux")
+
+
+def dhash(path, n=16):
+    """256-bit difference hash of a screenshot: near-identical screens differ in a few bits."""
+    from PIL import Image
+    im = Image.open(path).convert("L").resize((n + 1, n), Image.BILINEAR)
+    px = im.tobytes()
+    return sum(1 << i for i in range(n * n) if px[(i // n) * (n + 1) + i % n] > px[(i // n) * (n + 1) + i % n + 1])
+
+
+def screen_hashes(name):
+    """{image: hash} for one converted set, cached next to it."""
+    d = ROOT / "data/converted" / name
+    cache = d / "dhash.json"
+    hashes = json.loads(cache.read_text()) if cache.exists() else {}
+    for line in open(d / "screens.jsonl"):
+        img = json.loads(line)["image"]
+        if img not in hashes:
+            try:
+                hashes[img] = dhash(PUB / img)
+            except Exception:       # truncated / unreadable screenshots
+                hashes[img] = None
+    cache.write_text(json.dumps(hashes))
+    return hashes
+
+
+def benchmark_lookalikes(max_bits):
+    """Training-set images within max_bits of any benchmark screen."""
+    bench = [h for name in BENCHMARKS if (ROOT / "data/converted" / name / "screens.jsonl").exists()
+             for h in screen_hashes(name).values() if h is not None]
+    out = set()
+    for name in TRAIN_SETS:
+        for img, h in screen_hashes(name).items():
+            if h is not None and any(bin(h ^ b).count("1") <= max_bits for b in bench):
+                out.add(img)
+    return out
+
+
+def public_records(dup_bits):
+    lookalikes = benchmark_lookalikes(dup_bits)
+    for name in (*BENCHMARKS, *TRAIN_SETS):
         d = ROOT / "data/converted" / name
         if not (d / "examples.jsonl").exists():
             continue
         screens = {json.loads(l)["image"]: json.loads(l) for l in open(d / "screens.jsonl")}
         for line in open(d / "examples.jsonl"):
             ex = json.loads(line)
+            if name in TRAIN_SETS and ex["image"] in lookalikes:
+                yield "dropped_benchmark_lookalike", None
+                continue
             if not ex["target_ids"]:
                 # Kept for eval (the pixel sources missed it, so the right answer is "none"); never trained on.
-                if not ex["split"].startswith("eval"):
+                if name not in BENCHMARKS:
                     yield "dropped_unmatched", None
                     continue
             opts = screens[ex["image"]]["elements"][: MAX_OPTIONS - 1]
@@ -134,17 +185,19 @@ def public_records():
             if action is None:
                 yield "dropped_action", None
                 continue
-            split = split_names.get(name, {}).get(ex["split"], "train")
+            split = BENCHMARKS.get(name, "train")
             app = ex.get("app") or ex.get("platform") or name
             yield split, record(app, ex["instruction"], opts, targets, action=action,
                                 text_source=("user" if action == "type" else None),
-                                meta={"source": name, "id": ex["id"]})
+                                meta={"source": name, "id": ex["id"], "split": ex["split"],
+                                      **({"platform": ex["platform"]} if ex.get("platform") else {})})
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--heldout_sites", default="neetcode", help="comma-separated Mac sites/apps kept out of training")
     ap.add_argument("--cap", default="os_atlas_macos=6000,os_atlas_linux=6000", help="per-source caps for train_mix.jsonl")
+    ap.add_argument("--dup_bits", type=int, default=6, help="hash distance at or under which a training screen counts as a benchmark copy")
     ap.add_argument("--mac_repeat", type=int, default=2, help="times each Mac label appears in train_mix.jsonl")
     args = ap.parse_args()
     held = set(filter(None, args.heldout_sites.split(",")))
@@ -152,7 +205,7 @@ def main():
     counts = Counter()
     by_split = defaultdict(list)
     prefilter = MenuPrefilter()
-    for split, rec in [*mac_records(held, prefilter), *synthetic_records(prefilter), *public_records()]:
+    for split, rec in [*mac_records(held, prefilter), *synthetic_records(prefilter), *public_records(args.dup_bits)]:
         counts[split] += 1
         if rec is not None:
             by_split[split].append(rec)
