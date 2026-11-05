@@ -114,6 +114,7 @@ So real targets per screen are roughly AX 40 + OCR 2.6 + detector 5.1, about 18%
 | Synthetic set | 56% | 77% | 17% → 80% | 0.30 → 0.07 |
 | ScreenSpot-v2 | 51% | 67% | 0% → 31% | 0.17 → 0.06 |
 | ScreenSpot-Pro | 24% | 25% | 0% → 0% | 0.09 → 0.11 |
+| OSWorld-G | 25% | 28% | 1% → 6% | 0.07 → 0.09 |
 | OmniACT test (not clean, see above) | 45% | 58% | 0% → 19% | 0.21 → 0.09 |
 
 ### Other questions (val)
@@ -131,6 +132,7 @@ So real targets per screen are roughly AX 40 + OCR 2.6 + detector 5.1, about 18%
 - **"Ambiguous" is too cautious.** When it says ambiguous it's usually right, but it misses most real cases. Fixing this is the RL step's job.
 - **It never answers "none" on public sets** (0 of 356 on ScreenSpot-Pro): every public training example had a target present.
 - **Synthetic-set action is low (32%)** because that old set labels menu items "open_menu_item" while the new labels say "click".
+- **OSWorld-G barely moved (25% → 28%).** The target is in the parser's list for 79% of examples, and when it is, Kev picks it about 36% of the time. Published 2B screenshot models report about 59% (UI-Venus-1.5-2B). This checkpoint predates the lookalike filter, so it may have trained on some OS-Atlas Linux screens that resemble OSWorld-G; even so it scores low.
 - **ScreenSpot-Pro didn't move.** Even when the target is in the list, it picks it only about 32% of the time; icon captions don't say enough on dense professional toolbars.
 
 ## Screenshot models on the Mac (2026-11-05)
