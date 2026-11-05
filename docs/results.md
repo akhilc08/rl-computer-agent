@@ -97,3 +97,60 @@ So real targets per screen are roughly AX 40 + OCR 2.6 + detector 5.1, about 18%
 - **Fixing the missing AX web area is the bigger win.** That's where most of the real extras come from.
 - **Captions are weak on brand logos**, so icon text from the captioner can't be trusted alone.
 - **claude.ai never finished loading in the background window.** The explorer needs to wait for it, or skip it.
+
+## Kev 0.8B after the first fine-tune (2026-11-05)
+
+`jaredpalmer/kev-0.8b@v1.0` fine-tuned on `train_mix` (28,155 examples) for 1 epoch, 3,508 steps on an AWS A10G, about 13 h. Scored with `scripts/eval/score_kev.py`. Run directories: `runs/eval-base-0.8b` and `runs/eval-sft-0.8b-v1`; the adapter is `runs/sft-0.8b-v1` under `.vendor/kev`.
+
+**This run trained on OmniACT, and its test screens are the same screens as its training split, so the OmniACT row is not a clean result.** OmniACT is now held out completely (see [benchmarks.md](benchmarks.md)), and a clean retrain is planned.
+
+### Element accuracy, before → after
+
+| Set | Before | After | Act alone at 90%, before → after | Calibration error, before → after |
+|---|---|---|---|---|
+| Our Mac screens (val, Mac part) | 66% | **90%** | | |
+| All of val (Mac + OmniACT) | 53% | 75% | 8% → 63% | 0.26 → 0.10 |
+| NeetCode (site held out of training) | 75% | **86%** | 57% → **92%** | 0.42 → 0.09 |
+| Synthetic set | 56% | 77% | 17% → 80% | 0.30 → 0.07 |
+| ScreenSpot-v2 | 51% | 67% | 0% → 31% | 0.17 → 0.06 |
+| ScreenSpot-Pro | 24% | 25% | 0% → 0% | 0.09 → 0.11 |
+| OmniACT test (not clean, see above) | 45% | 58% | 0% → 19% | 0.21 → 0.09 |
+
+### Other questions (val)
+
+| Question | Before | After |
+|---|---|---|
+| Action (click / type / …) | 63% | 94% |
+| Text source | 66% | 99% |
+| Ambiguous | 70% | 92% (but it flags only 6 of 39 truly ambiguous; NeetCode: 32 of 102) |
+| Irreversible | 95% | 99% (1% base rate, so not meaningful yet) |
+| "Not on screen" on Mac screens | 21% | 82% |
+
+### Notes
+
+- **"Ambiguous" is too cautious.** When it says ambiguous it's usually right, but it misses most real cases. Fixing this is the RL step's job.
+- **It never answers "none" on public sets** (0 of 356 on ScreenSpot-Pro): every public training example had a target present.
+- **Synthetic-set action is low (32%)** because that old set labels menu items "open_menu_item" while the new labels say "click".
+- **ScreenSpot-Pro didn't move.** Even when the target is in the list, it picks it only about 32% of the time; icon captions don't say enough on dense professional toolbars.
+
+## Screenshot models on the Mac (2026-11-05)
+
+UI-Venus-1.5-2B and Qwen3-VL-2B, 4-bit MLX (`mlx-vlm`) on the M5 MacBook (32 GB). 25 commands from each of ScreenSpot-v2, ScreenSpot-Pro, OSWorld-G and OmniACT, same prompts and image budgets as the GPU eval (`scripts/eval/vlm_mac_speed.py`). Time covers resize + prefill + decode. For comparison, Kev's path is about 0.3–0.45 s: the element list is 110–270 ms and Kev 0.8B about 170 ms.
+
+| Model | Median per command | p90 | Hits (sample) | Peak memory |
+|---|---|---|---|---|
+| UI-Venus-1.5-2B | 5.6 s | 24.7 s | 70% | 5.0 GB |
+| Qwen3-VL-2B | 7.2 s | 21.0 s | 37% | 3.5 GB |
+
+UI-Venus by benchmark (time grows with screen resolution):
+
+| Benchmark | Median | Hits |
+|---|---|---|
+| OSWorld-G (1080p) | 3.1 s | 76% |
+| ScreenSpot-v2 | 5.6 s | 84% |
+| OmniACT (Retina Mac screens) | 12.1 s | 68% |
+| ScreenSpot-Pro (4K) | 24.5 s | 52% |
+
+On the same Mac, the 2B screenshot models are 10–50× slower than Kev but far more accurate on public screenshots. ShowUI-2B (small image budget) and the fast list-based models weren't timed: the runs were stopped because they made the laptop unusable. The rest runs on the GPU box.
+
+On the A10G: UI-Venus-1.5-2B about 0.86 s, ShowUI-2B about 0.82 s, Qwen3-VL-2B about 1.6 s per command on OSWorld-G (12-example smoke test). The full GPU runs are in progress.
