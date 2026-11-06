@@ -23,7 +23,9 @@ DENY = re.compile(
     r"discard|cancel|stop|end|hang ?up|request|approve|reject|vote|rate|review|bid|claim|redeem|transfer|"
     r"commit|push|pull|fetch|stage|unstage|run|debug|deploy|message|start|take|fork|watch|sponsor|merge|"
     r"rebase|terminal|launch|open in|reveal|copy|zoom|full ?screen|minimi[sz]e|maximi[sz]e|resize|hide|"
-    r"sidebar|sign ?in|log ?in|mention|format|bold|italic|emoji|attach|gif|reply)\b",
+    r"sidebar|sign ?in|log ?in|mention|format|bold|italic|emoji|attach|gif|reply|customi[sz]e|layout|"
+    r"cover|icon|property|template|table|checklist|list|bullet|media|photo|scan|sketch|audio|insert|"
+    r"collaborate|style|font|highlight|indent|link|aa)\b",
     re.I,
 )
 # Link targets that edit, create, configure or pay, whatever the link text says.
@@ -37,7 +39,9 @@ NEVER = {"AXCheckBox", "AXSwitch", "AXToggle", "AXSlider", "AXIncrementor", "AXT
 # Sites and apps where list rows are messages or notifications: opening one changes its state.
 MESSAGE_LISTS = ("mail.google.com", "linkedin.com/messaging", "linkedin.com/notifications", "claude.ai")
 # Slack channels are allowed: the user OK'd marking them read (2026-10-24).
-NAV_ONLY_APPS = {"System Settings"}   # look only: sidebar rows, links and back/forward
+# Look only: sidebar rows, links and back/forward. Notes and Notion are here because their toolbar
+# buttons edit whichever note is open (a 2026-11-05 run inserted a table and a checklist item).
+NAV_ONLY_APPS = {"System Settings", "Notes", "Notion"}
 
 
 def allowed(element, app, url=""):
