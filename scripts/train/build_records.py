@@ -118,7 +118,7 @@ def mix(train, caps, mac_repeat, seed=0):
 
 
 BENCHMARKS = {"screenspot_v2": "eval_ssv2", "screenspot_pro": "eval_sspro", "osworld_g": "eval_osworldg",
-              "mmbench_gui": "eval_mmbench", "omniact": "eval_omniact"}
+              "mmbench_gui": "eval_mmbench", "omniact": "eval_omniact", "androidcontrol": "eval_androidcontrol"}
 TRAIN_SETS = ("os_atlas_macos", "os_atlas_linux")
 
 
@@ -158,7 +158,7 @@ def benchmark_lookalikes(max_bits):
     return out
 
 
-def public_records(dup_bits):
+def public_records(dup_bits, none_examples=True):
     lookalikes = benchmark_lookalikes(dup_bits)
     for name in (*BENCHMARKS, *TRAIN_SETS):
         d = ROOT / "data/converted" / name
@@ -170,11 +170,14 @@ def public_records(dup_bits):
             if name in TRAIN_SETS and ex["image"] in lookalikes:
                 yield "dropped_benchmark_lookalike", None
                 continue
-            if not ex["target_ids"]:
-                # Kept for eval (the pixel sources missed it, so the right answer is "none"); never trained on.
-                if name not in BENCHMARKS:
+            source = name
+            if not ex["target_ids"] and name not in BENCHMARKS:
+                # The pixel sources missed the target, so given this list the right answer is "none". Train on these
+                # (capped via <set>_none in --cap): without them Kev never answers "none" on public screens.
+                if not none_examples:
                     yield "dropped_unmatched", None
                     continue
+                source = f"{name}_none"
             opts = screens[ex["image"]]["elements"][: MAX_OPTIONS - 1]
             ids = {o["id"] for o in opts}
             targets = [t for t in ex["target_ids"] if t in ids]
@@ -189,14 +192,14 @@ def public_records(dup_bits):
             app = ex.get("app") or ex.get("platform") or name
             yield split, record(app, ex["instruction"], opts, targets, action=action,
                                 text_source=("user" if action == "type" else None),
-                                meta={"source": name, "id": ex["id"], "split": ex["split"],
+                                meta={"source": source, "id": ex["id"], "split": ex["split"],
                                       **({"platform": ex["platform"]} if ex.get("platform") else {})})
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--heldout_sites", default="neetcode", help="comma-separated Mac sites/apps kept out of training")
-    ap.add_argument("--cap", default="os_atlas_macos=6000,os_atlas_linux=6000", help="per-source caps for train_mix.jsonl")
+    ap.add_argument("--cap", default="os_atlas_macos=6000,os_atlas_linux=6000,os_atlas_macos_none=1000,os_atlas_linux_none=1000", help="per-source caps for train_mix.jsonl")
     ap.add_argument("--dup_bits", type=int, default=6, help="hash distance at or under which a training screen counts as a benchmark copy")
     ap.add_argument("--mac_repeat", type=int, default=2, help="times each Mac label appears in train_mix.jsonl")
     args = ap.parse_args()

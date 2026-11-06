@@ -14,6 +14,9 @@ Writes runs/vlm/<model>/<set>/rows.jsonl and summary.json. GPU box only (not the
           the Qwen3-VL repo's cookbooks/ via --qwen_cookbook)
           gui-actor-2b (own venv: transformers==4.51.3, qwen-vl-utils==0.0.8, accelerate,
           `pip install -e GUI-Actor --no-deps`; its pointer-head code does not run on transformers>=4.52)
+          tinyclick (Florence-2 remote code: same venv as gui-actor, plus timm and einops)
+  sets: the five public sets (default) and our Mac labels: mac_val (records val.jsonl) and neetcode
+        (heldout_site.jsonl), built from the records + screens.jsonl + explorer states (see mac_examples)
 """
 import argparse
 import importlib.util
@@ -30,11 +33,14 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from score_kev import coverage_at, ece  # noqa: E402
 
-SETS = ["screenspot_v2", "screenspot_pro", "osworld_g", "mmbench_gui", "omniact"]
+SETS = ["screenspot_v2", "screenspot_pro", "osworld_g", "mmbench_gui", "omniact", "androidcontrol"]
 MODELS = {"venus-2b": ("inclusionAI/UI-Venus-1.5-2B", "venus"), "venus-8b": ("inclusionAI/UI-Venus-1.5-8B", "venus"),
           "qwen3vl-2b": ("Qwen/Qwen3-VL-2B-Instruct", "qwen3vl"), "gui-actor-2b": ("microsoft/GUI-Actor-2B-Qwen2-VL", "gui_actor"),
-          "showui-2b": ("showlab/ShowUI-2B", "showui")}
+          "showui-2b": ("showlab/ShowUI-2B", "showui"), "tinyclick": ("Krystianz/TinyClick", "tinyclick")}
 WARMUP = 3
+RECORDS = {"screenspot_v2": "eval_ssv2", "screenspot_pro": "eval_sspro", "osworld_g": "eval_osworldg",
+           "mmbench_gui": "eval_mmbench", "omniact": "eval_omniact", "androidcontrol": "eval_androidcontrol"}
+MAC_SETS = {"mac_val": "val", "neetcode": "heldout_site"}     # our Mac labels: set -> records file (see mac_examples)
 
 
 def attn_impl():
@@ -228,8 +234,89 @@ def gui_actor(repo, args):
     return predict, {"max_pixels": max_px, "conf": "pointer_region_mass", "prepare": prepare}
 
 
+# ---- TinyClick (Florence-2-base, 0.27B) ----
+# Source: the model card of the authors' MIT mirror https://huggingface.co/Krystianz/TinyClick (Samsung/TinyClick and
+# github.com/SamsungLabs/TinyClick are no longer online; the card's usage code is unchanged, with the repo id swapped).
+# Prompt: ("What to do to execute the command? " + command.strip()).lower(); processor(images, text, do_resize=True)
+# (768x768); model.generate(**inputs) with the repo's generation_config (3 beams, no_repeat_ngram 3, max_length 20);
+# decoded with skip_special_tokens=False. Output "click <loc_X><loc_Y>", X/Y in 0-999 bins of the image width and
+# height; mapped with Florence-2's dequantisation (bin + 0.5) / 1000, as in the co-author's ONNX card
+# (huggingface.co/sebpost/TinyClick-ONNX). The card runs fp32 (no dtype), so we do too. Florence-2's remote code
+# (trust_remote_code) needs timm and einops and does not load on transformers>=4.52, so run it from the GUI-Actor
+# venv (transformers 4.51.3). Confidence: the top beam's length-normalised sequence probability.
+TINYCLICK_PROMPT = "What to do to execute the command? "
+
+
+def parse_tinyclick(text):
+    """-> (action, (x_bin, y_bin)) from the first <loc_X><loc_Y> pair, or (action, None)."""
+    m = re.search(r"</s><s>(<[^>]+>|[^<\s]+)", text)
+    p = re.search(r"<loc_(\d+)><loc_(\d+)>", text)
+    return (m.group(1).strip() if m else None), ((int(p.group(1)), int(p.group(2))) if p else None)
+
+
+def tinyclick(repo, args):
+    from transformers import AutoModelForCausalLM, AutoProcessor
+    proc = AutoProcessor.from_pretrained(repo, trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained(repo, trust_remote_code=True, attn_implementation="eager").to("cuda").eval()
+
+    def predict(img, instruction, _set):
+        text = (TINYCLICK_PROMPT + instruction.strip()).lower()
+        inputs = proc(images=img, text=text, return_tensors="pt", do_resize=True).to("cuda")
+        out = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
+        raw = proc.batch_decode(out.sequences, skip_special_tokens=False)[0]
+        action, b = parse_tinyclick(raw)
+        pt = ((b[0] + 0.5) / 1000 * img.width, (b[1] + 0.5) / 1000 * img.height) if b else None
+        conf = math.exp(float(out.sequences_scores[0])) if getattr(out, "sequences_scores", None) is not None else None
+        return {"point": pt, "status": "ok" if pt else "unparsed", "raw": raw, "conf": conf, "action": action}
+    return predict, {"max_pixels": 768 * 768, "conf": "beam_sequence_prob", "dtype": "float32"}
+
+
 def inside(box, pt):
     return box[0] <= pt[0] <= box[0] + box[2] and box[1] <= pt[1] <= box[1] + box[3]
+
+
+def mac_examples(set_name, records_dir):
+    """Our Mac sets, built from Kev's records (data/records_s/<file>.jsonl) + data/labels/screens.jsonl + the explorer
+    states (data/{explore,native}/<run>/states.jsonl). instruction = the record's command; gt_boxes = the boxes of
+    every gold target (a hit inside any counts). AX/OCR/detector boxes are in screen points; the screenshot is the
+    window captured at `scale` pixels per point (frame[2] * scale == image width and frame[3] * scale == height on
+    every labelled screen), so a box maps to pixels as ((x - frame_x) * scale, (y - frame_y) * scale, w * s, h * s),
+    then is clipped to the image. Skipped and counted: target absent ("none"), no screenshot, gold targets with no
+    box (menu-bar items) or entirely outside the window."""
+    screens = {s["id"]: s for s in map(json.loads, open(ROOT / "data/labels/screens.jsonl"))}
+    states, exs, skipped = {}, [], defaultdict(int)
+    for r in map(json.loads, open(ROOT / records_dir / f"{MAC_SETS[set_name]}.jsonl")):
+        q, meta = r["questions"]["element"], r["_meta"]
+        s = screens.get(meta["screen"])
+        targets = list(q.get("target") or ([q["label"]] if q["label"] != "none" else []))
+        if not targets:
+            skipped["absent"] += 1
+            continue
+        if not s or not s.get("shot") or not (ROOT / s["shot"]).exists():
+            skipped["no_screenshot"] += 1
+            continue
+        run = (ROOT / s["shot"]).parent.parent
+        if run not in states:
+            states[run] = {f"{run.name}-{t['id']}": t for t in map(json.loads, open(run / "states.jsonl"))}
+        st = states[run][s["id"]]
+        (fx, fy, fw, fh), sc = st["frame"], st["scale"]
+        W, H = round(fw * sc), round(fh * sc)
+        boxes, by_id = [], {o["id"]: o for o in s["options"]}
+        for t in targets:
+            b = by_id.get(t, {}).get("box")
+            if not b:
+                continue
+            x1, y1 = max(0, (b[0] - fx) * sc), max(0, (b[1] - fy) * sc)
+            x2, y2 = min(W, (b[0] + b[2] - fx) * sc), min(H, (b[1] + b[3] - fy) * sc)
+            if x2 > x1 and y2 > y1:
+                boxes.append([round(x1, 1), round(y1, 1), round(x2 - x1, 1), round(y2 - y1, 1)])
+        if not boxes:
+            skipped["target_no_box" if all(not by_id.get(t, {}).get("box") for t in targets) else "target_offscreen"] += 1
+            continue
+        exs.append({"id": meta["id"], "shot": s["shot"], "instruction": r["state"].split("User command: ", 1)[1],
+                    "gt_box": boxes[0], "gt_boxes": boxes, "platform": meta.get("site") or s.get("app"),
+                    "screen": s["id"], "size": [W, H]})
+    return exs, dict(skipped)
 
 
 def gt_box(ex, size):
@@ -265,8 +352,10 @@ def summarize(rows, n_no_box, meta):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True, choices=MODELS)
-    ap.add_argument("--sets", nargs="+", default=SETS, choices=SETS)
+    ap.add_argument("--sets", nargs="+", default=SETS, choices=SETS + list(MAC_SETS))
     ap.add_argument("--limit", type=int, default=0, help="first N examples per set")
+    ap.add_argument("--ids_from", help="keep only examples whose id is in this records dir (e.g. data/records_s, the fixed "
+                    "500-example samples every model is scored on)")
     ap.add_argument("--splits", nargs="*", help="keep only these splits (e.g. eval test); default all")
     ap.add_argument("--data_root", default="data/public")
     ap.add_argument("--converted", default="data/converted")
@@ -278,18 +367,29 @@ def main():
     import transformers
     from PIL import Image
     repo, kind = MODELS[args.model]
-    predict, info = {"venus": venus, "qwen3vl": qwen3vl, "showui": showui, "gui_actor": gui_actor}[kind](repo, args)
+    predict, info = {"venus": venus, "qwen3vl": qwen3vl, "showui": showui, "gui_actor": gui_actor,
+                     "tinyclick": tinyclick}[kind](repo, args)
     prepare = info.pop("prepare", lambda img, s: img)
     meta = {"model": repo, "attn": attn_impl(), "gpu": torch.cuda.get_device_name(0), "torch": torch.__version__,
             "transformers": transformers.__version__, **info}
     data_root, ran = ROOT / args.data_root, 0
     for set_name in args.sets:
-        src = ROOT / args.converted / set_name / "examples.jsonl"
-        if not src.exists():
-            print(f"{set_name}: no {src}, skipped", flush=True)
-            continue
-        exs = [json.loads(line) for line in open(src)]
-        exs = [e for e in exs if not args.splits or e.get("split") in args.splits][: args.limit or None]
+        mac_skipped = None
+        if set_name in MAC_SETS:
+            exs, mac_skipped = mac_examples(set_name, args.ids_from or "data/records_s")
+            exs = exs[: args.limit or None]
+            print(f"{set_name}: {len(exs)} examples, skipped {mac_skipped}", flush=True)
+        else:
+            src = ROOT / args.converted / set_name / "examples.jsonl"
+            if not src.exists():
+                print(f"{set_name}: no {src}, skipped", flush=True)
+                continue
+            exs = [json.loads(line) for line in open(src)]
+            exs = [e for e in exs if not args.splits or e.get("split") in args.splits][: args.limit or None]
+        if args.ids_from and set_name not in MAC_SETS:
+            rec = ROOT / args.ids_from / f"{RECORDS[set_name]}.jsonl"
+            ids = {json.loads(line)["_meta"]["id"] for line in open(rec)}
+            exs = [e for e in exs if e["id"] in ids]
         out = ROOT / args.out / args.model / set_name
         out.mkdir(parents=True, exist_ok=True)
         rows_path = out / "rows.jsonl"
@@ -302,8 +402,10 @@ def main():
                     continue
                 if ex["id"] in done:
                     continue
-                img = Image.open(data_root / ex["image"]).convert("RGB")
+                img = Image.open(ROOT / ex["shot"] if "shot" in ex else data_root / ex["image"]).convert("RGB")
                 size = img.size                      # boxes and output points are in original pixels
+                if "size" in ex and list(size) != ex["size"]:
+                    print(f"{ex['id']}: image {size} but frame*scale {ex['size']}", flush=True)
                 img = prepare(img, set_name)
                 box = gt_box(ex, size)
                 torch.cuda.synchronize()
@@ -319,9 +421,10 @@ def main():
                 conf = p.pop("_conf")() if "_conf" in p else p.get("conf")
                 pt = p["point"]
                 row = {"id": ex["id"], "platform": ex.get("platform"), "point": [round(v, 1) for v in pt] if pt else None,
-                       "hit": bool(pt and inside(box, pt)), "latency_ms": round(ms, 1), "warmup": ran < WARMUP,
+                       "hit": bool(pt and any(inside(b, pt) for b in ex.get("gt_boxes") or [box])), "latency_ms": round(ms, 1), "warmup": ran < WARMUP,
                        "conf": conf, "status": p["status"], "raw": p["raw"], "gt_box": box, "size": list(size),
-                       **{k: p[k] for k in ("topk", "topk_values") if k in p}}
+                       **{k: p[k] for k in ("topk", "topk_values", "action") if k in p},
+                       **({"gt_boxes": ex["gt_boxes"], "screen": ex["screen"]} if "gt_boxes" in ex else {})}
                 f.write(json.dumps(row) + "\n")
                 f.flush()
                 ran += 1
@@ -329,7 +432,8 @@ def main():
                     print(f"{set_name} {i + 1}/{len(exs)}", flush=True)
         rows = [json.loads(line) for line in open(rows_path)]
         keep = {e["id"] for e in exs}
-        s = summarize([r for r in rows if r["id"] in keep], n_no_box, {**meta, "set": set_name})
+        s = summarize([r for r in rows if r["id"] in keep], n_no_box,
+                      {**meta, "set": set_name, **({"skipped": mac_skipped} if mac_skipped is not None else {})})
         (out / "summary.json").write_text(json.dumps(s, indent=2))
         print(f"{set_name}: acc {s['accuracy']} n {s['n']} median {s['latency_ms']['median']} ms "
               f"p90 {s['latency_ms']['p90']} ms ece {s['calibration']['ece']}", flush=True)
