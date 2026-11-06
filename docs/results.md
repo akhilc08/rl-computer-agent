@@ -206,3 +206,60 @@ Kev's serving path on the Mac (4-bit MLX) takes about 0.17 s for the model. The 
 - **The screenshot sets have no HTML.** MindAct and WebLINX get a synthetic page built from our parser's list instead (role → tag, label → text), so those sets are new ground for them. Their Mind2Web numbers use the real page HTML and match their papers' setup.
 - **WebLINX is approximated.** We don't run its own ranker on our candidates, and it's conversational: flan-T5 large usually answers with a chat reply ("Okay") instead of acting, which is why its scores are so low.
 - **Mind2Web here is element accuracy for each step, with the ranker's top 50.** MindAct's paper reports element accuracy over all steps, including ones the ranker misses. To compare with the paper, multiply by the top-50 hit rate. For example, MindAct large on the domain split: 44.7% × 0.87 ≈ 39%. The paper reports about 40% for that split, so our setup reproduces theirs.
+
+## Option sources: coverage vs speed (2026-11-06)
+
+Every option source scored on the same screens: 712 Arc screenshots from explorer run `20261025-124135` plus public screenshots (OmniACT 98 Mac screens, ScreenSpot-Pro 300, OSWorld-G 250). Scripts: `scripts/eval/optbench_build.py` (manifest, AX, Vision OCR), `optbench_detect.py` (pixel detectors), `optbench_score.py` (coverage). Outputs are in `data/option_bench/`.
+
+A target is covered when some option's center falls inside one of its correct boxes. That is, clicking the option would hit it. The ground truths:
+
+- **label:** labelled command targets on our Arc screens.
+- **press:** elements whose press changed the screen.
+- **public sets:** human answer boxes.
+
+Label and press both lean toward AX, because labels were written from AX-based lists and the explorer only presses AX elements. The public sets have no AX at all, so they stand in for screens where AX fails.
+
+Times are Mac medians (M5) per screen, with each source running alone. The Core ML columns run on all screens; the MPS rows are a 60-screen sample. UI-DETR was only run on the A10G.
+
+### Single sources
+
+| Source | Mac ms | Options/screen | label | press | OmniACT | ScreenSpot-Pro | SS-Pro icons | OSWorld-G |
+|---|---|---|---|---|---|---|---|---|
+| Blind grid, 150 cells (chance) | 0 | 148 | 48.7 | 44.2 | 45.6 | 18.0 | 12.7 | 27.5 |
+| AX (recorded live) | 111 | 78 | 95.4 | 99.8 | | | | |
+| Vision OCR fast | 66 | 62 | 73.8 | 72.6 | 58.8 | 24.0 | 3.4 | 31.6 |
+| Vision OCR accurate | 169 | 62 | 75.8 | 71.1 | 63.5 | 23.0 | 3.4 | 39.0 |
+| OmniParser v2 @1280, MPS (today's detector) | 132 | 124 | 84.5 | 81.4 | 82.3 | 83.0 | 87.3 | 75.9 |
+| OmniParser v2 @1280, Core ML | 93 | 131 | 85.4 | 82.3 | 85.4 | 85.0 | 89.8 | 76.9 |
+| **GPA-GUI-Detector @1280, Core ML** | **87** | 151 | 89.0 | 89.1 | 90.9 | **90.0** | 85.6 | 77.5 |
+| **GPA-GUI-Detector @640, Core ML** | **32** | 116 | 87.3 | 87.1 | 89.6 | 57.7 | 53.4 | 79.0 |
+| Screen2AX YOLO11l @1280, MPS | 157 | 152 | 82.2 | 84.7 | 89.4 | 78.0 | 77.1 | 73.7 |
+| OmniParser icon_detect_v3 @1280, MPS | 574 | 147 | 90.1 | 87.1 | 90.9 | 64.0 | 61.0 | 77.3 |
+| UI-DETR-1 @1600 (A10G only) | 336 (GPU) | 261 | 93.6 | 94.3 | 95.5 | 80.7 | 74.6 | 84.3 |
+
+Detectors are shown at confidence 0.05. With the same budget of 100 boxes each on ScreenSpot-Pro, the scores are GPA 54, OmniParser v2 49, Screen2AX 45, v3 43, UI-DETR 41 and the blind grid 10. So GPA's lead isn't just from returning more boxes.
+
+### Combinations
+
+Sources run in parallel. When run together on the Mac, fast OCR plus GPA (Core ML) takes 60 ms at 640px and 99 ms at 1280px, both under the 111 ms AX walk.
+
+| Combination | Mac ms (parallel) | Options/screen | label | label not from AX | press | OmniACT | ScreenSpot-Pro | OSWorld-G |
+|---|---|---|---|---|---|---|---|---|
+| AX + OCR fast | ~111 | 137 | 99.8 | 95.3 | 99.8 | | | |
+| AX + OCR fast (≤6 words) + GPA @640 | ~111 | 187 | 100.0 | 99.7 | 99.8 | | | |
+| OCR fast (≤6 words) + GPA @640, no AX | ~60 | 171 | 91.0 | 99.7 | 90.9 | 90.7 | 66.3 | 81.4 |
+| OCR fast (≤6 words) + GPA @1280, no AX | ~99 | 204 | 92.2 | 99.7 | 92.4 | 92.1 | 91.3 | 80.0 |
+| OCR fast (≤6 words) + OmniParser v2 @1280, no AX | ~94 | 185 | 92.6 | 99.0 | 92.8 | 92.5 | 89.3 | 81.8 |
+
+### What this shows
+
+- **Swap the detector for GPA-GUI-Detector via Core ML.** At 640px it takes 32 ms, against 132 ms for today's OmniParser v2 on MPS (268 ms in the earlier replay). It covers as much or more on every set. It's also MIT-licensed, while OmniParser v2's weights are AGPL. fp16 Core ML stays within 1–3 points of the GPU runs.
+- **640px is enough for normal windows. Dense 4K screens need 1280px.** ScreenSpot-Pro coverage goes from 58% at 640px to 90% at 1280px, while every other set is about the same. Switch to 1280px only when the screen is large or crowded.
+- **The pixel sources add no wait.** Fast OCR plus GPA finishes inside the AX walk, so AX + OCR + detector costs about the same ~111 ms as AX alone, and the merged list reaches 100% of labelled targets.
+- **Without AX, OCR + GPA reaches about 91% on ordinary screens.** The misses are on dense pro apps (ScreenSpot-Pro at 640px) and Linux desktops (OSWorld-G, about 80%).
+- **The cost is a longer list:** about 187 options per screen instead of 137. That makes Kev's prompt longer and pushes toward its 255-option cap. Kev also hasn't been trained on detector-only answers yet (see the caption bug in label prep). Pixel options should go in when AX is thin, or be ranked, rather than appended in full.
+- **Not worth it:**
+  - OmniParser icon_detect_v3: 4× slower than v2 on the Mac and worse on dense screens.
+  - UI-DETR-1: the best raw coverage, but it returns 260–300 boxes and takes 336 ms even on a GPU.
+  - Screen2AX's macOS-trained YOLO: slower than GPA and worse on every set.
+- **Not finished:** Florence-2 region proposals and the ScreenVLM-316M listing model were still running on the GPU box when SSH access dropped (the Mac's IP changed). Their results are still on the box.
