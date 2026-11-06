@@ -185,7 +185,7 @@ def main():
     out, conv = Path(a.out), Path(a.converted)
     out.mkdir(parents=True, exist_ok=True)
     conv.mkdir(parents=True, exist_ok=True)
-    stats, written = {}, set()
+    stats, written = {}, {}
     with open(out / "eval_weblinx.jsonl", "w") as fr, open(conv / "screens.jsonl", "w") as fs, \
             open(conv / "examples.jsonl", "w") as fe:
         for split, turns in picks.items():
@@ -235,7 +235,7 @@ def main():
                     px_box = [round(v * s) for v in box]
                     elements = [{"id": f"e{k}", "role": o["role"], "label": o["label"],
                                  "box": [round(v * s) for v in (bbox(x["elem_dict"]) or [0, 0, 0, 0])],
-                                 "sources": ["weblinx_dmr"]} for k, (o, x) in enumerate(zip(opts, top))]
+                                 "uid": x["uid"], "sources": ["weblinx_dmr"]} for k, (o, x) in enumerate(zip(opts, top))]
                 meta = {"source": "weblinx", "id": f"{demo}-{ti}", "split": split, "demo": demo, "turn_index": ti,
                         "website": site, "url": url, "intent": intent, "value": value, "utterance": utt, "prev": prev,
                         "viewport": [vh, vw], "cand_uids": [x["uid"] for x in top], "gold_uid": gold,
@@ -244,13 +244,14 @@ def main():
                 if px_box:
                     st["with_box"] += 1
                     rel = f"weblinx/{shot}"
-                    if rel not in written:
-                        written.add(rel)
+                    if rel not in written:     # a screenshot shared by two sampled turns keeps the first's list
+                        written[rel] = elements
                         fs.write(json.dumps({"image": rel, "size": size, "elements": elements}) + "\n")
                     fe.write(json.dumps({"id": f"weblinx-{demo}-{ti}", "image": rel, "split": "eval", "wl_split": split,
                                          "platform": "web", "app": site, "instruction": utt, "history": prev,
                                          "action": ACTION[intent], "text": value, "gt_box": px_box,
-                                         "target_ids": [f"e{k_gold}"] if k_gold is not None else []},
+                                         "gold_uid": gold,
+                                         "target_ids": [e["id"] for e in written[rel] if e["uid"] == gold]},
                                         ensure_ascii=False) + "\n")
                 if k_gold is None:
                     continue
