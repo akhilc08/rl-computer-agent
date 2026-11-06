@@ -9,6 +9,11 @@ Writes data/labels/screens.jsonl (one row per screen, with options) and data/lab
 (the same options as text, for whoever writes the commands).
 
   .venv/bin/python scripts/data/label_prep.py --run data/explore/<stamp>
+  .venv/bin/python scripts/data/label_prep.py --native data/native/<stamp> [...]   (adds native-app screens)
+
+Native runs have no URL, so one screen per distinct window (its element signature), and screens whose
+(role, label) set is at least --near (Jaccard) like one already kept in the same app are dropped: the
+explorer revisits the same Notes / Slack views with different text. --native appends to screens.jsonl.
 """
 import argparse
 import json
@@ -65,6 +70,27 @@ def explore_screens(run):
                "url": s["url"], "title": s.get("title"), "shot": str((run / s["shot"]).relative_to(ROOT)), "options": opts}
 
 
+def native_screens(runs, near):
+    kept = []
+    for run in runs:
+        best = {}
+        for line in open(run / "states.jsonl"):
+            st = json.loads(line)
+            k = (st["app"], st["sig"])
+            if k not in best or (st.get("shot") and not best[k].get("shot")):
+                best[k] = st
+        for st in best.values():
+            toks = {(e["role"], e["label"]) for e in st["elements"]}
+            if not toks or any(a == st["app"] and len(toks & t) / len(toks | t) >= near for a, t in kept):
+                continue
+            kept.append((st["app"], toks))
+            opts = [option(e["id"], e, "window") for e in st["elements"]]
+            opts += [option(f"m{i}", e, "menubar") for i, e in enumerate(e for e in st.get("menubar", []) if e.get("enabled", True))]
+            yield {"id": f"{run.name}-{st['id']}", "kind": "native", "app": st["app"], "site": None, "url": None,
+                   "title": st.get("title"), "shot": str((run / st["shot"]).relative_to(ROOT)) if st.get("shot") else None,
+                   "options": opts}
+
+
 def snapshot_screens():
     for f in sorted((ROOT / "data/snapshots").glob("*.json")):
         snap = json.load(open(f))
@@ -95,12 +121,20 @@ def render(screen):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run", required=True)
+    ap.add_argument("--run")
+    ap.add_argument("--native", nargs="+", help="native explorer runs to add to the existing screens")
+    ap.add_argument("--near", type=float, default=0.95)
     args = ap.parse_args()
+    assert args.run or args.native, "--run or --native"
     (OUT / "screens").mkdir(parents=True, exist_ok=True)
     n = 0
-    with open(OUT / "screens.jsonl", "w") as f:
-        for screen in [*explore_screens(ROOT / args.run), *snapshot_screens()]:
+    if args.native:
+        have = {json.loads(line)["id"] for line in open(OUT / "screens.jsonl")} if (OUT / "screens.jsonl").exists() else set()
+        new = [x for x in native_screens([ROOT / r for r in args.native], args.near) if x["id"] not in have]
+    else:
+        new = [*explore_screens(ROOT / args.run), *snapshot_screens()]
+    with open(OUT / "screens.jsonl", "a" if args.native else "w") as f:
+        for screen in new:
             f.write(json.dumps(screen) + "\n")
             (OUT / "screens" / f"{screen['id']}.txt").write_text(render(screen))
             n += 1
