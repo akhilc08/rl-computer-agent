@@ -196,21 +196,24 @@ def main():
     ap.add_argument("--sets", default="")
     ap.add_argument("--limit", type=int, default=0, help="first N screens per set (for Mac timing)")
     ap.add_argument("--out", default="")
+    ap.add_argument("--bench", default=str(BENCH), help="benchmark dir with manifest.jsonl (v2 images are relative to it)")
     args = ap.parse_args()
-    rows = [json.loads(l) for l in open(BENCH / "manifest.jsonl")]
+    bench = Path(args.bench)
+    rows = [json.loads(l) for l in open(bench / "manifest.jsonl")]
     if args.sets:
         rows = [r for r in rows if r["set"] in args.sets.split(",")]
     if args.limit:
         per = {}
         rows = [r for r in rows if per.setdefault(r["set"], []).append(r) or len(per[r["set"]]) <= args.limit]
     src = make(args.source)
-    out = Path(args.out) if args.out else BENCH / "sources" / f"{args.source.replace(':', '@')}.jsonl"
+    out = Path(args.out) if args.out else bench / "sources" / f"{args.source.replace(':', '@')}.jsonl"
+    path = lambda r: bench / r["image"] if (bench / r["image"]).exists() else ROOT / r["image"]  # noqa: E731
     out.parent.mkdir(parents=True, exist_ok=True)
-    warm = Image.open(ROOT / rows[0]["image"]).convert("RGB")
+    warm = Image.open(path(rows[0])).convert("RGB")
     src(warm)                                 # load kernels before timing
     with open(out, "w") as f:
         for i, r in enumerate(rows):
-            img = Image.open(ROOT / r["image"]).convert("RGB")
+            img = Image.open(path(r)).convert("RGB")
             sync()
             t0 = time.perf_counter()
             boxes = src(img)

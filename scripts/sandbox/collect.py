@@ -125,8 +125,11 @@ def quit_app(name):
 
 
 def main_window(pid):
-    wins = [w for w in all_windows(pid) if (f := frame_of(w)) and f[2] > 200 and f[3] > 150 and not attr(w, "AXMinimized")]
-    focused = attr(AXUIElementCreateApplication(pid), "AXFocusedWindow")
+    # all_windows finds windows on every Space but misses some (Notes, Calendar...); AXWindows has those.
+    app = AXUIElementCreateApplication(pid)
+    cands = list(all_windows(pid)) + [w for w in attr(app, "AXWindows") or [] if attr(w, "AXSubrole") == "AXStandardWindow"]
+    wins = [w for w in cands if (f := frame_of(w)) and f[2] > 200 and f[3] > 150 and not attr(w, "AXMinimized")]
+    focused = attr(app, "AXFocusedWindow")
     return focused if focused is not None and focused in wins else (wins[0] if wins else None)
 
 
@@ -232,7 +235,8 @@ class Collector:
                     time.sleep(2)
                 if (win := main_window(pid)) is None:
                     return "no window"
-            if step == 0:
+            f = frame_of(win)
+            if step == 0 or (f and f[0] >= self.size[0]):      # new windows can open on the 1024x768 display
                 resize(win, self.size)
                 time.sleep(0.8)
             url = web_url(win) if start_url else ""
