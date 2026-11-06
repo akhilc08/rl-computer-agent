@@ -15,6 +15,7 @@ State: website, the task, and the last 3 actions done (Mind2Web is multi-step; e
 import argparse
 import glob
 import json
+import random
 import re
 import sys
 from pathlib import Path
@@ -61,6 +62,8 @@ def main():
     ap.add_argument("--top_k", type=int, default=50)
     ap.add_argument("--ranker", default="osunlp/MindAct_CandidateGeneration_deberta-v3-base")
     ap.add_argument("--limit", type=int, default=0, help="tasks per split (quick check)")
+    ap.add_argument("--splits", nargs="+", default=["task", "website", "domain"])
+    ap.add_argument("--sample", type=int, default=0, help="convert a fixed random sample of N steps per split (seed 0)")
     a = ap.parse_args()
     import torch
     from lxml import etree
@@ -77,37 +80,40 @@ def main():
             scores += ranker(**enc).logits[:, -1].float().tolist()
         return scores
 
-    for split in ("test_task", "test_website", "test_domain"):
+    for split in (f"test_{x}" for x in a.splits):
         tasks = [t for f in sorted(glob.glob(f"{a.root}/{split}/*.json")) for t in json.load(open(f))]
         if a.limit:
             tasks = tasks[: a.limit]
+        steps = [(t, i) for t in tasks for i in range(len(t["actions"]))]
+        if a.sample:
+            steps = [steps[j] for j in sorted(random.Random(0).sample(range(len(steps)), min(a.sample, len(steps))))]
         n = hit = 0
         with open(Path(a.out) / f"eval_m2w_{split.removeprefix('test_')}.jsonl", "w") as f:
-            for t in tasks:
-                for i, act in enumerate(t["actions"]):
-                    tree = etree.fromstring(act["cleaned_html"])
-                    cands = [(c, True) for c in act["pos_candidates"]] + [(c, False) for c in act["neg_candidates"]]
-                    texts = [format_candidate(tree, c["backend_node_id"]) for c, _ in cands]
-                    prev_list = t["action_reprs"][max(0, i - 3):i]
-                    prev = "; ".join(prev_list)
-                    query = f"task is: {t['confirmed_task']}\nPrevious actions: {prev}"
-                    scores = rank(query, [r for r, _ in texts])
-                    top = sorted(range(len(cands)), key=lambda j: -scores[j])[: a.top_k]
-                    n += 1
-                    if not any(cands[j][1] for j in top):
-                        continue
-                    hit += 1
-                    opts = [dict(zip(("role", "label"), kev_option(texts[j][1])), id=f"e{k}") for k, j in enumerate(top)]
-                    targets = [f"e{k}" for k, j in enumerate(top) if cands[j][1]]
-                    op = act["operation"]
-                    state_app = f"{t['website']} (web)"
-                    command = f"{t['confirmed_task']}\nDone so far: {prev or 'None'}"
-                    rec = record(state_app, command, opts, targets, action=OPS.get(op["op"]),
-                                 meta={"source": "mind2web", "id": f"{t['annotation_id']}-{i}", "split": split,
-                                       "domain": t["domain"], "website": t["website"], "op": op["op"], "value": op["value"],
-                                       "task": t["confirmed_task"], "prev": prev_list, "action_index": i,
-                                       "backend_ids": [cands[j][0]["backend_node_id"] for j in top]})
-                    f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            for t, i in steps:
+                act = t["actions"][i]
+                tree = etree.fromstring(act["cleaned_html"])
+                cands = [(c, True) for c in act["pos_candidates"]] + [(c, False) for c in act["neg_candidates"]]
+                texts = [format_candidate(tree, c["backend_node_id"]) for c, _ in cands]
+                prev_list = t["action_reprs"][max(0, i - 3):i]
+                prev = "; ".join(prev_list)
+                query = f"task is: {t['confirmed_task']}\nPrevious actions: {prev}"
+                scores = rank(query, [r for r, _ in texts])
+                top = sorted(range(len(cands)), key=lambda j: -scores[j])[: a.top_k]
+                n += 1
+                if not any(cands[j][1] for j in top):
+                    continue
+                hit += 1
+                opts = [dict(zip(("role", "label"), kev_option(texts[j][1])), id=f"e{k}") for k, j in enumerate(top)]
+                targets = [f"e{k}" for k, j in enumerate(top) if cands[j][1]]
+                op = act["operation"]
+                state_app = f"{t['website']} (web)"
+                command = f"{t['confirmed_task']}\nDone so far: {prev or 'None'}"
+                rec = record(state_app, command, opts, targets, action=OPS.get(op["op"]),
+                             meta={"source": "mind2web", "id": f"{t['annotation_id']}-{i}", "split": split,
+                                   "domain": t["domain"], "website": t["website"], "op": op["op"], "value": op["value"],
+                                   "task": t["confirmed_task"], "prev": prev_list, "action_index": i,
+                                   "backend_ids": [cands[j][0]["backend_node_id"] for j in top]})
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
         print(f"{split}: {n} steps, target in top {a.top_k} for {hit} ({hit / max(n, 1):.1%})", flush=True)
 
 

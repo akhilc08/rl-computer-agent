@@ -156,3 +156,53 @@ UI-Venus by benchmark (time grows with screen resolution):
 On the same Mac, the 2B screenshot models are 10–50× slower than Kev but far more accurate on public screenshots. ShowUI-2B (small image budget) and the fast list-based models weren't timed: the runs were stopped because they made the laptop unusable. The rest runs on the GPU box.
 
 On the A10G: UI-Venus-1.5-2B about 0.86 s, ShowUI-2B about 0.82 s, Qwen3-VL-2B about 1.6 s per command on OSWorld-G (12-example smoke test). The full GPU runs are in progress.
+
+## Kev vs the open element-list models: MindAct and WebLINX (2026-11-06)
+
+Every model picks from the same element list for the same commands. The lists come from the page's HTML on Mind2Web and from our pixel parser on the screenshot sets; our Mac set and NeetCode use AX trees. Each set is the same fixed sample of 500 decisions (seed 0, `data/records_s`). The exceptions are all 429 Mac val screens, plus 519 website and 521 domain steps on Mind2Web. On Mind2Web, MindAct's own DeBERTa ranker keeps the top 50 elements, and every model picks from those 50. The target makes the top 50 for 90% of task, 87% of website and 87% of domain steps; MindAct's paper reports about 86%. Steps whose target isn't in the top 50 are left out for every model. Scripts: `scripts/data/convert_mind2web.py`, `scripts/eval/webagent_baselines.py`, `scripts/eval/score_kev.py`. Outputs: `runs/webagents`, `runs/kev-box`.
+
+### Element accuracy (%)
+
+| Model | Params | M2W task | M2W website | M2W domain | ScreenSpot-v2 | ScreenSpot-Pro | OSWorld-G | MMBench-GUI L2 | OmniACT | Our Mac screens | NeetCode (held-out site) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| **Kev 0.8B, before training** | 0.8B | 2.4 | 3.3 | 4.0 | 53.0 | **27.4** | 24.6 | 30.8 | 42.4 | 66.0 | 75.2 |
+| **Kev 0.8B, after training** | 0.8B | 7.6 | 10.6 | 10.8 | **68.8** | 26.8 | **28.2** | **37.8** | *60.2* | **90.4** | **86.0** |
+| MindAct base | 0.25B | 49.8 | 37.6 | 38.0 | 33.4 | 18.8 | 16.4 | 13.8 | 20.2 | 34.5 | 26.4 |
+| MindAct large | 0.8B | 56.2 | 43.5 | 44.7 | 37.8 | 17.2 | 16.2 | 18.2 | 23.6 | 49.4 | 35.4 |
+| MindAct XL | 3B | **60.0** | **46.8** | **48.6** | 22.6 | 24.0 | 22.6 | 13.8 | 18.2 | 54.3 | 37.8 |
+| WebLINX flan-T5 base | 0.25B | 5.6 | 5.8 | 6.9 | 26.6 | 6.4 | 10.8 | 10.2 | 16.6 | 19.8 | 23.4 |
+| WebLINX flan-T5 large | 0.8B | 1.4 | 1.9 | 2.9 | 4.4 | 24.4 | 20.8 | 9.6 | 11.2 | 14.7 | 8.8 |
+| WebLINX Sheared-LLaMA | 1.3B | 7.8 | 8.7 | 10.9 | 24.0 | 6.4 | 9.6 | 10.0 | 14.8 | 17.5 | 17.4 |
+| WebLINX MindAct base | 0.25B | 5.6 | 6.0 | 8.1 | 25.2 | 6.6 | 10.2 | 10.8 | 15.2 | 18.9 | 24.0 |
+| WebLINX MindAct large | 0.8B | 6.6 | 6.4 | 7.7 | 27.8 | 6.0 | 10.0 | 10.2 | 17.2 | 19.8 | 25.2 |
+
+*Italic:* Kev's after-training OmniACT score isn't clean. That checkpoint trained on OmniACT's train split, which shares screens with its test split. The before-training score (42.4) is clean.
+
+### Speed (A10G, each model alone on the GPU, 100 decisions)
+
+| Model | Median per decision, M2W (50 elements) | Median, NeetCode (~100 elements) | Model calls per decision |
+|---|---|---|---|
+| Kev 0.8B (PyTorch bf16 eval path) | **0.23 s** | 0.68 s | 1 |
+| MindAct base / large / XL | 1.28 / 2.09 / 2.56 s | 1.52 / 2.86 / 3.09 s | 11 on M2W, 20 on NeetCode (multiple choice in rounds of 5) |
+| WebLINX flan-T5 base / large | 0.40 / 1.31 s | 0.40 / 0.74 s | 1 |
+| WebLINX Sheared-LLaMA 1.3B | 5.09 s | 5.09 s | 1 |
+| WebLINX MindAct base / large | 0.42 / 0.81 s | 0.43 / 0.81 s | 1 |
+
+Kev's serving path on the Mac (4-bit MLX) takes about 0.17 s for the model. The A10G number above uses the unoptimized PyTorch path used for scoring. WebLINX models see only the 10 elements their ranker keeps, so their prompts are short. Neither Mind2Web's ranker nor WebLINX's is in the timings, and our parser isn't either.
+
+### What this shows
+
+- **Off Mind2Web, Kev wins every set, even before training.** It's ahead of the best MindAct/WebLINX model by 31 points on ScreenSpot-v2, 20 on MMBench-GUI, 36 on our Mac screens and 48 on NeetCode. It's also 5–10× faster than MindAct (one call instead of 11–20). The WebLINX models with similar speed (flan/MindAct base, ~0.4 s) score 10–25%.
+- **On Mind2Web, MindAct wins by a lot (50–60% vs Kev's 8–11%).** There are two reasons:
+  - MindAct was trained on Mind2Web's train split, which has the same task style and many of the same sites.
+  - Mind2Web asks something different from what Kev does. It gives a high-level goal plus history ("Find all events in New York in September", done so far: …) and asks for the next step. Kev grounds a direct command ("click Change Location"). It usually picks the element most related to the goal, often the one already clicked.
+
+  The WebLINX models, which weren't trained on Mind2Web, also score 2–11% there. Even the ranker's first pick alone gets 34%, so Kev isn't using the ranker's order.
+- **To be competitive on Mind2Web, Kev needs Mind2Web training data, as MindAct and WebLINX had.** The options are to train on Mind2Web train (7,775 steps, no overlap with the test splits) or to report Mind2Web only as an out-of-domain number.
+- **Training didn't hurt anything, and it helped most where our data matches** (Mac +24, NeetCode +11, ScreenSpot-v2 +16 points). The "none" problem from the earlier section shows up again. On MMBench-GUI, Kev says "none" correctly 1% of the time after training versus 39% before, so the retrain needs public "none" examples.
+
+### Caveats
+
+- **The screenshot sets have no HTML.** MindAct and WebLINX get a synthetic page built from our parser's list instead (role → tag, label → text), so those sets are new ground for them. Their Mind2Web numbers use the real page HTML and match their papers' setup.
+- **WebLINX is approximated.** We don't run its own ranker on our candidates, and it's conversational: flan-T5 large usually answers with a chat reply ("Okay") instead of acting, which is why its scores are so low.
+- **Mind2Web here is element accuracy for each step, with the ranker's top 50.** MindAct's paper reports element accuracy over all steps, including ones the ranker misses. To compare with the paper, multiply by the top-50 hit rate. For example, MindAct large on the domain split: 44.7% × 0.87 ≈ 39%. The paper reports 39.6%, so our setup reproduces theirs.

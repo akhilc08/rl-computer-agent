@@ -42,7 +42,7 @@ MODELS.update({"wl-flan-base": ("McGill-NLP/flan-t5-base-weblinx", "wl_flan"),
                "wl-mindact-large": ("McGill-NLP/MindAct-large-weblinx", "wl_m2w")})
 WARMUP = 3
 DESC = re.compile(r'(?P<role>\S+) "(?P<label>.*)"(?: · in: (?P<ctx>.*?))?(?P<off> · disabled)?$', re.S)
-BAD_XML = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+BAD_XML = re.compile("[^\t\n\r\x20-\ud7ff\ue000-\ufffd\U00010000-\U0010ffff]")  # everything XML 1.0 forbids
 
 
 def parse_record(rec):
