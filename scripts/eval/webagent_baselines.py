@@ -13,8 +13,17 @@ Latency = GPU-synchronised wall time per decision from prompt building to parsed
 DMR ranking for WebLINX); the first 3 decisions of a run are warm-up and left out of the speed summary. Rows append,
 so a rerun resumes.
 
+WebLINX set ("weblinx", records from convert_weblinx.py): real pages and WebLINX's released DMR ranking. MindAct
+runs its tournament over the top --top_k (50) on the turn's real page HTML (data-webtasks-id as backend_node_id), with
+task = the latest instructor utterance and previous actions = the record's last 5 turns. WebLINX models get their
+native prompt, built by the WebLINX repo's own code (modeling/llama/processing.py build_prompt_records_for_llama_truncated
+for flan-T5 and Sheared-LLaMA, modeling/flan/processing_m2w.py build_prompt_records_for_m2w for their MindAct) from the
+raw demo (replay.json + page HTML) and the released top-10 DMR candidates, as their flan/eval.py and llama/eval.py do.
+The DMR ranking is precomputed (released), so it isn't in those latencies; loading the demo files isn't either.
+
 Writes runs/webagents/<model>/<set>/rows.jsonl and summary.json. GPU box only (not the Mac):
   git clone https://github.com/OSU-NLP-Group/Mind2Web ~/Mind2Web     (all models import its dom_utils; pure python)
+  git clone https://github.com/McGill-NLP/weblinx ~/weblinx          (weblinx set only; pure python)
   pip install lxml sentence-transformers                            (sentence-transformers: WebLINX DMR ranker only)
   python scripts/eval/webagent_baselines.py --model mindact-large --sets m2w_task ssv2 val [--limit 50]
 """
@@ -33,7 +42,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SETS = {"m2w_task": "eval_m2w_task.jsonl", "m2w_website": "eval_m2w_website.jsonl", "m2w_domain": "eval_m2w_domain.jsonl",
         "ssv2": "eval_ssv2.jsonl", "sspro": "eval_sspro.jsonl", "osworldg": "eval_osworldg.jsonl", "mmbench": "eval_mmbench.jsonl", "omniact": "eval_omniact.jsonl", "val": "val.jsonl",
-        "heldout_site": "heldout_site.jsonl"}
+        "heldout_site": "heldout_site.jsonl", "weblinx": "eval_weblinx.jsonl", "androidcontrol": "eval_androidcontrol.jsonl"}
 MODELS = {f"mindact-{s}": (f"osunlp/MindAct_ActionPrediction_flan-t5-{s}", "mindact") for s in ("base", "large", "xl")}
 MODELS.update({"wl-flan-base": ("McGill-NLP/flan-t5-base-weblinx", "wl_flan"),
                "wl-flan-large": ("McGill-NLP/flan-t5-large-weblinx", "wl_flan"),
@@ -109,7 +118,7 @@ def mindact(repo, args):
     from lxml import etree
 
     def predict(r):
-        real = raw.lookup(r)                      # real cleaned_html + full action history when available
+        real = r.get("wl_mindact") or raw.lookup(r)   # real cleaned_html + full action history when available
         if real:
             sample, back = real
         else:
@@ -143,6 +152,18 @@ def mindact(repo, args):
         op = final[1].split()[0] if final[1].strip() else None
         return {"pick": back[final[0]], "op_raw": op, "op": {"CLICK": "click", "TYPE": "type", "SELECT": "select"}.get(op),
                 "calls": calls, "real_html": bool(real), "value": final[1].partition(" ")[2] or None}
+
+    wl = WLRaw(args.wl_root, args.weblinx_repo)
+
+    def prepare(r):                               # untimed: read the WebLINX page and make it Mind2Web-shaped
+        if r["meta"].get("source") == "weblinx":
+            uids = r["meta"]["cand_uids"]
+            ids = {c[0] for c in r["cands"]}
+            r["wl_mindact"] = ({"cleaned_html": wl.mindact_html(r), "confirmed_task": r["meta"]["utterance"] or "None",
+                                "previous_actions": r["meta"]["prev"]},
+                               {u: f"e{k}" for k, u in enumerate(uids) if f"e{k}" in ids})
+        return r
+    predict.prepare = prepare
     return predict, {"dtype": "float32"}
 
 
@@ -167,6 +188,62 @@ class M2WRaw:
         back = {b: f"e{k}" for k, b in enumerate(m["backend_ids"]) if f"e{k}" in ids}
         return {"cleaned_html": t["actions"][i]["cleaned_html"], "confirmed_task": t["confirmed_task"],
                 "previous_actions": t["action_reprs"][:i]}, back
+
+
+M2W_SALIENT = {"alt", "aria_description", "aria_label", "aria_role", "input_checked", "input_value", "label", "name",
+               "option_selected", "placeholder", "role", "text_value", "title", "type", "value"}   # Mind2Web clean_tree
+
+
+class WLRaw:
+    """Raw WebLINX demo for a weblinx record (data/public/weblinx/demonstrations/<demo>, fetched by convert_weblinx.py),
+    read with the weblinx library. Keeps the last demo's replay (records are grouped by demo)."""
+    def __init__(self, root, repo):
+        self.root, self.cur = Path(root), (None, None)
+        sys.path.insert(0, str(Path(repo).expanduser()))
+
+    def turn(self, r):
+        import weblinx as wl
+        demo = r["meta"]["demo"]
+        if self.cur[0] != demo:
+            self.cur = demo, wl.Replay.from_demonstration(wl.Demonstration(demo, base_dir=str(self.root / "demonstrations")))
+        return self.cur[1], self.cur[1][r["meta"]["turn_index"]]
+
+    def mindact_html(self, r):
+        """The turn's page as Mind2Web cleaned_html: XML, backend_node_id on every element (WebLINX's
+        data-webtasks-id where present, so candidates keep their uid), no head/script/style/comments, and only the
+        attributes Mind2Web's clean_tree keeps (salient ones, names with non-word chars as "_"; svg icon classes)."""
+        import lxml.html
+        from lxml import etree
+        _, turn = self.turn(r)
+        tree = lxml.html.fromstring(turn.html)
+        for n in tree.xpath("//head|//script|//style|//noscript|//template|//comment()|//processing-instruction()"):
+            parent = n.getparent()
+            if parent is not None:
+                if n.tail:                        # lxml drops the tail with the node; it's the next text, keep it
+                    prev = n.getprevious()
+                    if prev is not None:
+                        prev.tail = (prev.tail or "") + n.tail
+                    else:
+                        parent.text = (parent.text or "") + n.tail
+                parent.remove(n)
+        for i, n in enumerate(tree.iter()):
+            if not isinstance(n.tag, str):
+                continue
+            uid = n.attrib.get("data-webtasks-id")
+            keep = {}
+            for k, v in n.attrib.items():
+                k2, v = re.sub(r"\W", "_", k), " ".join(BAD_XML.sub("", v).split())
+                if k2 in M2W_SALIENT and v and not (k2 == "role" and v in ("presentation", "none", "link")) \
+                        and not (k2 == "type" and v == "hidden"):
+                    keep[k2] = v
+                elif k == "class" and n.tag == "svg" and re.findall(r"\S*icon\S*", v, re.I):
+                    keep["class"] = " ".join(re.findall(r"\S*icon\S*", v, re.I))
+            n.attrib.clear()
+            n.attrib.update(keep)
+            n.attrib["backend_node_id"] = uid or f"_n{i}"
+            n.text = BAD_XML.sub("", n.text) if n.text else n.text
+            n.tail = BAD_XML.sub("", n.tail) if n.tail else n.tail
+        return etree.tostring(tree, encoding="unicode")
 
 
 # ---- WebLINX ----
@@ -243,8 +320,42 @@ def weblinx(repo, kind, args):
     dmr = SentenceTransformer("McGill-NLP/MiniLM-L6-dmr", device="cuda")
     dmr.max_seq_length = 512                      # dmr/conf/config.yaml
     h, w = args.viewport.split("x")
+    wl = WLRaw(args.wl_root, args.weblinx_repo)
+
+    def generate(prompt):
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            if kind == "wl_llama":
+                x = tok(prompt, add_special_tokens=False, return_tensors="pt").to("cuda")
+                out = model.generate(**x, max_new_tokens=256, do_sample=False, pad_token_id=tok.eos_token_id)
+                return tok.decode(out[0, x["input_ids"].shape[1]:], skip_special_tokens=True)
+            x = tok(prompt, truncation=True, max_length=2048, return_tensors="pt").to("cuda")
+            return tok.decode(model.generate(**x, max_new_tokens=256, do_sample=False)[0], skip_special_tokens=True)
+
+    def predict_native(r):
+        """WebLINX record: the repo's own prompt builders on the raw demo + released top-10 DMR candidates."""
+        from modeling.flan.processing import build_formatter_for_multichoice, format_prompt_for_flan
+        from modeling.flan.processing_m2w import build_formatter_for_m2w, build_prompt_records_for_m2w
+        from modeling.llama.processing import build_prompt_records_for_llama_truncated, format_prompt_llama
+        replay, turn = r["wl_turn"]
+        cands = r["meta"]["wl_cands"][: args.wl_k]
+        if kind == "wl_m2w":                      # flan/eval.py with data.use_m2w (variant ft_mindact)
+            recs = build_prompt_records_for_m2w(replay=replay, turn=turn, format_intent=build_formatter_for_m2w(),
+                                                cands_turn=cands)
+        else:                                     # flan/eval.py and llama/eval.py
+            recs = build_prompt_records_for_llama_truncated(replay=replay, turn=turn, tokenizer=tok, cands_turn=cands,
+                                                            format_intent=build_formatter_for_multichoice())
+        prompt = format_prompt_llama(recs) if kind == "wl_llama" else format_prompt_for_flan(recs)
+        text = generate(prompt)
+        intent, kv = parse_wl(text)
+        back = {u: f"e{k}" for k, u in enumerate(r["meta"]["cand_uids"])}
+        pick = back.get(kv.get("uid")) if intent in WL_OPS else None
+        top = {back[c["uid"]] for c in cands if c["uid"] in back}
+        return {"pick": pick or "none", "op_raw": intent or None, "op": WL_OPS.get(intent) if pick else None,
+                "calls": 1, "dmr_hit": bool(top & r["gold"]), "raw": text, "prompt_tokens": len(tok(prompt)["input_ids"])}
 
     def predict(r):
+        if r["meta"].get("source") == "weblinx":
+            return predict_native(r)
         rid = r["id"]
         uids = {c[0]: (lambda x: f"{x[:8]}-{x[8:12]}-{x[12:16]}")(hashlib.md5(f"{rid}/{c[0]}".encode()).hexdigest())
                 for c in r["cands"]}
@@ -290,18 +401,19 @@ def weblinx(repo, kind, args):
             user = f'say(speaker="instructor", utterance="{cmd}") {FINAL_WL}'
             prompt = (f"<s>[INST] <<SYS>>\n{sys_p}\n<</SYS>>\n\n{user}[/INST]" if kind == "wl_llama"  # format_prompt_llama
                       else sys_p + "\n" + f"User: {user}\n" + "\nAssistant:")              # format_prompt_for_flan
-        with torch.autocast("cuda", dtype=torch.bfloat16):
-            if kind == "wl_llama":
-                x = tok(prompt, add_special_tokens=False, return_tensors="pt").to("cuda")
-                out = model.generate(**x, max_new_tokens=256, do_sample=False, pad_token_id=tok.eos_token_id)
-                text = tok.decode(out[0, x["input_ids"].shape[1]:], skip_special_tokens=True)
-            else:
-                x = tok(prompt, truncation=True, max_length=2048, return_tensors="pt").to("cuda")
-                text = tok.decode(model.generate(**x, max_new_tokens=256, do_sample=False)[0], skip_special_tokens=True)
+        text = generate(prompt)
         intent, kv = parse_wl(text)
         pick = back.get(kv.get("uid")) if intent in WL_OPS else None
         return {"pick": pick or "none", "op_raw": intent or None, "op": WL_OPS.get(intent) if pick else None,
                 "calls": 1, "dmr_hit": bool(set(top) & r["gold"]), "raw": text}
+
+    def prepare(r):                               # untimed: load the raw demo (replay + page HTML)
+        if r["meta"].get("source") == "weblinx":
+            replay, turn = wl.turn(r)
+            _ = turn.html                         # cached_property: read the page file now
+            r["wl_turn"] = (replay, turn)
+        return r
+    predict.prepare = prepare
     return predict, {"dtype": "bfloat16", "wl_k": args.wl_k, "viewport": args.viewport}
 
 
@@ -338,12 +450,15 @@ def main():
     ap.add_argument("--viewport", default="746x1536", help="WebLINX: HxW written in the prompt (we have none)")
     ap.add_argument("--mind2web_repo", default="~/Mind2Web", help="clone of OSU-NLP-Group/Mind2Web")
     ap.add_argument("--m2w_root", default="data/public/mind2web", help="raw Mind2Web test splits (real HTML)")
+    ap.add_argument("--wl_root", default="data/public/weblinx", help="raw WebLINX demos fetched by convert_weblinx.py")
+    ap.add_argument("--weblinx_repo", default="~/weblinx", help="clone of McGill-NLP/weblinx (weblinx set)")
     args = ap.parse_args()
     import torch
     import transformers
     sys.path.insert(0, str(Path(args.mind2web_repo).expanduser() / "src/action_prediction"))
     sys.path.insert(0, str(Path(args.mind2web_repo).expanduser() / "src"))
     args.m2w_root = str(ROOT / args.m2w_root)
+    args.wl_root = str(ROOT / args.wl_root)
     repo, kind = MODELS[args.model]
     predict, info = mindact(repo, args) if kind == "mindact" else weblinx(repo, kind, args)
     meta = {"model": repo, "gpu": torch.cuda.get_device_name(0), "torch": torch.__version__,
@@ -367,8 +482,9 @@ def main():
                 r = parse_record(rec)
                 if r["id"] in done:
                     continue
-                if r["meta"].get("source") == "mind2web":   # ranker-ordered; other sets are in screen order, so
-                    r["cands"] = r["cands"][: args.top_k]   # cutting them would drop the target (it does in ~40%)
+                if r["meta"].get("source") in ("mind2web", "weblinx"):   # ranker-ordered; other sets are in screen
+                    r["cands"] = r["cands"][: args.top_k]   # order, so cutting them would drop the target (~40%)
+                r = getattr(predict, "prepare", lambda x: x)(r)
                 torch.cuda.synchronize()
                 t0 = time.perf_counter()
                 with torch.inference_mode():
@@ -378,8 +494,10 @@ def main():
                 row = {"id": r["id"], "pick": p.pop("pick"), "gold": sorted(r["gold"]), "op": p.pop("op", None),
                        "op_gold": r["op_gold"], "n_model_calls": p.pop("calls"), "latency_ms": round(ms, 1),
                        "warmup": ran < WARMUP, "n_cands": len(r["cands"]), **p}
+                if r["meta"].get("source") == "weblinx":
+                    row["wl_split"] = r["meta"]["split"]
                 row["hit"] = row["pick"] in r["gold"]
-                if r["meta"].get("op"):
+                if r["meta"].get("op") and r["meta"].get("source") == "mind2web":
                     row["op_gold_raw"] = r["meta"]["op"]
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
                 f.flush()
