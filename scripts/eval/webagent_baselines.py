@@ -229,6 +229,10 @@ class WLRaw:
         for i, n in enumerate(tree.iter()):
             if not isinstance(n.tag, str):
                 continue
+            if n.tag == "text":                   # SVG <text>; Mind2Web's DOM code reserves <text> for its own text nodes
+                n.tag = "span"
+            elif not re.fullmatch(r"[A-Za-z_][\w.-]*", n.tag):   # namespaced / odd tags (<uim:ad>) aren't valid XML here
+                n.tag = "x" + re.sub(r"[^\w.-]", "_", n.tag)
             uid = n.attrib.get("data-webtasks-id")
             keep = {}
             for k, v in n.attrib.items():
