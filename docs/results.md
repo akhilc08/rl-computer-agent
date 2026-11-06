@@ -262,4 +262,6 @@ Sources run in parallel. When run together on the Mac, fast OCR plus GPA (Core M
   - OmniParser icon_detect_v3: 4× slower than v2 on the Mac and worse on dense screens.
   - UI-DETR-1: the best raw coverage, but it returns 260–300 boxes and takes 336 ms even on a GPU.
   - Screen2AX's macOS-trained YOLO: slower than GPA and worse on every set.
-- **Not finished:** Florence-2 region proposals and the ScreenVLM-316M listing model were still running on the GPU box when SSH access dropped (the Mac's IP changed). Their results are still on the box.
+- **A small model listing the elements doesn't work yet:**
+  - Florence-2-base region proposals return about one box per screen, usually the whole page, so they cover almost nothing (0–3%).
+  - ScreenVLM-316M (IBM's screen parser) writes out the whole page as tagged boxes. It hit its 4,096-token cap on every screen and took about 340 s per screen on an A10G. On the 6 screens it finished, it found 6 of 19 pressed elements. Even a 100× faster runtime would be slower than the whole AX + OCR + detector stack.
