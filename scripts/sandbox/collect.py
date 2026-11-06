@@ -28,6 +28,7 @@ from urllib.parse import urlparse
 
 import Quartz
 from AppKit import NSApplicationActivateIgnoringOtherApps, NSWorkspace
+from Foundation import NSDate, NSRunLoop
 from ApplicationServices import AXUIElementCreateApplication, AXUIElementSetAttributeValue, AXValueCreate, \
     kAXValueCGPointType, kAXValueCGSizeType
 
@@ -65,7 +66,9 @@ MACHINE_DENY = re.compile(
     r"sharing|remote|screen sharing|file sharing|firewall|network|wi-?fi|ethernet|vpn|bluetooth|users?|groups?|"
     r"password|passwords|passkey|filevault|privacy|security|accessibility|login items|software update|update|"
     r"install|uninstall|migration|transfer|time machine|sign ?in|log ?in|apple ?id|apple account|icloud|"
-    r"energy|battery|screen time|profiles?|keychain|developer|terminal|quit)\b", re.I)
+    r"energy|battery|screen time|profiles?|keychain|developer|terminal|quit|"
+    # Disk Utility and Activity Monitor: never touch disks or kill processes (sshd, the virtual display)
+    r"partition|mount|unmount|eject|first aid|restore|format|raid|force|kill|stop|sample|signal)\b", re.I)
 # Web forms that would reach real people or create accounts.
 WEB_DENY = re.compile(r"\b(contact|subscribe|newsletter|sign ?up|register|join|create account|send|submit|"
                       r"apply|checkout|buy|add to cart|order|book now|reserve|donate|report|feedback|chat)\b", re.I)
@@ -74,7 +77,10 @@ SAFE_PRESS = {"AXButton", "AXLink", "AXTab", "AXRadioButton", "AXPopUpButton", "
 TYPABLE = {"AXTextField", "AXSearchField", "AXTextArea", "AXComboBox"}
 FAKE_TEXT = ["meeting notes", "grocery list", "Lisbon", "budget 2025", "Sam Rivera", "pasta recipe", "weekly plan",
              "hello world", "project ideas", "weather tomorrow", "jazz", "Ithaca", "birthday party", "tax checklist"]
-SIZES = [(1440, 900), (1280, 800), (1024, 768), (1680, 1050)]
+# Screen sizes of the HiDPI virtual display (scripts/sandbox/virtual_display.m), cycled per round.
+SIZES = [(1440, 900), (1280, 800), (1680, 1050), (1920, 1080)]
+VDISPLAY = os.environ.get("RLCA_VDISPLAY", "983D324D-A931-4414-8898-7E1951B77892")
+DISPLAYPLACER = "/opt/homebrew/bin/displayplacer"
 ESC, CMD_LBRACKET = 53, 33
 
 
@@ -90,6 +96,9 @@ def set_dark(dark):
 
 
 def running(name):
+    # runningApplications only refreshes when the run loop turns; a plain script never turns it,
+    # so apps launched after the first call would never show up.
+    NSRunLoop.currentRunLoop().runUntilDate_(NSDate.dateWithTimeIntervalSinceNow_(0.2))
     for a in NSWorkspace.sharedWorkspace().runningApplications():
         if a.localizedName() == name:
             return a
@@ -121,9 +130,19 @@ def main_window(pid):
     return focused if focused is not None and focused in wins else (wins[0] if wins else None)
 
 
-def resize(win, size):
-    w, h = size
-    AXUIElementSetAttributeValue(win, "AXPosition", AXValueCreate(kAXValueCGPointType, Quartz.CGPointMake(0, 30)))
+def set_screen(size):
+    """Switch the virtual display to a resolution; it stays the main display at (0, 0)."""
+    sh([DISPLAYPLACER, f"id:{VDISPLAY} res:{size[0]}x{size[1]} scaling:on origin:(0,0) degree:0"])
+    time.sleep(2)
+
+
+def resize(win, screen):
+    """A window size people actually use: full screen, or a random 60-95% of it, below the menu bar."""
+    sw, sh_ = screen[0], screen[1] - 25 - 80          # menu bar and dock
+    frac = 1.0 if random.random() < 0.35 else random.uniform(0.6, 0.95)
+    w, h = int(sw * frac), int(sh_ * frac)
+    x, y = random.randint(0, sw - w), 25 + random.randint(0, sh_ - h)
+    AXUIElementSetAttributeValue(win, "AXPosition", AXValueCreate(kAXValueCGPointType, Quartz.CGPointMake(x, y)))
     AXUIElementSetAttributeValue(win, "AXSize", AXValueCreate(kAXValueCGSizeType, Quartz.CGSizeMake(w, h)))
 
 
@@ -205,8 +224,12 @@ class Collector:
                 time.sleep(0.8)
             win = main_window(pid)
             if win is None:
-                X.key(45, cmd=True)          # Cmd-N: most apps open a fresh window
+                # A reopen (clicking the Dock icon) brings back the main window; Cmd-N as a fallback.
+                subprocess.run(["open", "-a", app_name], capture_output=True)
                 time.sleep(2)
+                if (win := main_window(pid)) is None:
+                    X.key(45, cmd=True)
+                    time.sleep(2)
                 if (win := main_window(pid)) is None:
                     return "no window"
             if step == 0:
@@ -250,6 +273,7 @@ def main():
         c.dark = rnd % 2 == 1
         c.size = SIZES[(rnd // 2) % len(SIZES)]
         set_dark(c.dark)
+        set_screen(c.size)
         if rnd and rnd % args.reseed_every == 0:
             sh(f"RLCA_SANDBOX=1 {ROOT}/scripts/vm/seed_content.sh", timeout=600)
         jobs = [("app", a) for a in APPS] + [("site", s) for s in SITES]
