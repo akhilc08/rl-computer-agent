@@ -265,3 +265,37 @@ Sources run in parallel. When run together on the Mac, fast OCR plus GPA (Core M
 - **A small model listing the elements doesn't work yet:**
   - Florence-2-base region proposals return about one box per screen, usually the whole page, so they cover almost nothing (0–3%).
   - ScreenVLM-316M (IBM's screen parser) writes out the whole page as tagged boxes. It hit its 4,096-token cap on every screen and took about 340 s per screen on an A10G. On the 6 screens it finished, it found 6 of 19 pressed elements. Even a 100× faster runtime would be slower than the whole AX + OCR + detector stack.
+
+### Where each step ran
+
+Nothing here touched live apps. AX was not walked again: the scores use the AX trees the explorer recorded live on the owner's Mac (Arc on 2026-10-25, `data/explore/20261025-124135`). Everything else ran on saved screenshots.
+
+| Step | Ran on | Input |
+|---|---|---|
+| AX | owner's MacBook (M5), live, during the 2026-10-25 explorer run | recorded `elements` and `ms.ax_window` in `states.jsonl` |
+| Vision OCR, fast and accurate | owner's MacBook | saved screenshots (`optbench_build.py`) |
+| Detector coverage on all screens | AWS g5.xlarge (A10G) | the same screenshots, uploaded with the owner's OK and deleted afterward |
+| Detector timing | owner's MacBook: Core ML on all screens, MPS on a 60-screen sample | saved screenshots (`optbench_detect.py`) |
+| Core ML export | AWS box (needs `numpy<2.3` and torch ≤ 2.7; coremltools 9 fails on the Mac's torch 2.14) | Ultralytics `export(format="coreml", half=True)` |
+| Scoring | owner's MacBook | `optbench_score.py` |
+
+Not tested yet:
+- **Native apps.** The about 440 explorer screenshots of Slack, Notion, Notes, Spotify and Zed in `data/native/` already have recorded AX. Other apps would need fresh look-only captures.
+- **Independent ground truth.** Targets that every source missed are invisible to these labels.
+
+### Running it on an AWS Mac
+
+Every step except AX runs on saved files, so on an EC2 Mac instance:
+
+1. Copy `data/option_bench/manifest.jsonl` and the screenshots it lists. Don't copy the private explore screenshots unless the owner signs off; the public sets alone are fine.
+2. Run `optbench_build.py`, then `optbench_detect.py --source gpa_coreml:640` (and the others), then `optbench_score.py`.
+3. Copy the Core ML packages from `~/.cache/rlca/coreml/`, or export them again in an environment with `numpy<2.3`.
+
+Live AX needs a bit more:
+
+- **Permissions.** The Python or terminal process needs Accessibility and Screen Recording access. On an EC2 Mac these are granted once through a GUI session (VNC / Screen Sharing), or through an MDM profile.
+- **Apps.** They have to be installed, signed in where it matters, and open, with a real window on the virtual display.
+- **Scripts.**
+  - `scripts/eval/compare_sources.py` walks AX on the current window of each running app and times it.
+  - `scripts/data/explore_native.py` records full runs in the layout `optbench_build.py` reads (`states.jsonl` + `shots/`).
+- **Timings.** EC2 Macs are M1 / M2 / M2 Pro / M4, not the owner's M5, so expect different numbers. Compare sources on the same machine, not against this table.
