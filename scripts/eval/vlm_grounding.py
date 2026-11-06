@@ -33,13 +33,13 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from score_kev import coverage_at, ece  # noqa: E402
 
-SETS = ["screenspot_v2", "screenspot_pro", "osworld_g", "mmbench_gui", "omniact", "androidcontrol"]
+SETS = ["screenspot_v2", "screenspot_pro", "osworld_g", "mmbench_gui", "omniact", "androidcontrol", "weblinx"]
 MODELS = {"venus-2b": ("inclusionAI/UI-Venus-1.5-2B", "venus"), "venus-8b": ("inclusionAI/UI-Venus-1.5-8B", "venus"),
           "qwen3vl-2b": ("Qwen/Qwen3-VL-2B-Instruct", "qwen3vl"), "gui-actor-2b": ("microsoft/GUI-Actor-2B-Qwen2-VL", "gui_actor"),
           "showui-2b": ("showlab/ShowUI-2B", "showui"), "tinyclick": ("Krystianz/TinyClick", "tinyclick")}
 WARMUP = 3
 RECORDS = {"screenspot_v2": "eval_ssv2", "screenspot_pro": "eval_sspro", "osworld_g": "eval_osworldg",
-           "mmbench_gui": "eval_mmbench", "omniact": "eval_omniact", "androidcontrol": "eval_androidcontrol"}
+           "mmbench_gui": "eval_mmbench", "omniact": "eval_omniact", "androidcontrol": "eval_androidcontrol", "weblinx": "eval_weblinx"}
 MAC_SETS = {"mac_val": "val", "neetcode": "heldout_site"}     # our Mac labels: set -> records file (see mac_examples)
 
 
@@ -389,7 +389,7 @@ def main():
         if args.ids_from and set_name not in MAC_SETS:
             rec = ROOT / args.ids_from / f"{RECORDS[set_name]}.jsonl"
             ids = {json.loads(line)["_meta"]["id"] for line in open(rec)}
-            exs = [e for e in exs if e["id"] in ids]
+            exs = [e for e in exs if e["id"] in ids or e["id"].removeprefix(f"{set_name}-") in ids]   # weblinx ids carry the set prefix
         out = ROOT / args.out / args.model / set_name
         out.mkdir(parents=True, exist_ok=True)
         rows_path = out / "rows.jsonl"
