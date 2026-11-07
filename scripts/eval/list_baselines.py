@@ -118,6 +118,8 @@ def model2vec_model():
     def decide(rec):
         q = rec["questions"]["element"]
         keys = [k for k in q["criteria"] if k != "none"]
+        if not keys:                                # only "none" on offer
+            return "none", 1.0, ""
         command = rec["state"].split("User command:", 1)[-1].strip()
         v = enc.encode([command] + [q["criteria"][k] for k in keys])
         v = v / (np.linalg.norm(v, axis=1, keepdims=True) + 1e-9)
