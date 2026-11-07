@@ -145,6 +145,8 @@ def sweep():
     NSRunLoop.currentRunLoop().runUntilDate_(NSDate.dateWithTimeIntervalSinceNow_(0.2))
     for a in NSWorkspace.sharedWorkspace().runningApplications():
         name, exe = a.localizedName(), str(a.executableURL().lastPathComponent() if a.executableURL() else "")
+        if a.processIdentifier() == os.getpid():          # this script is a Python.app, so it counts as a regular app
+            continue
         if (a.activationPolicy() == 0 and name not in KEEP_RUNNING) or name in DIALOG_HELPERS or exe in DIALOG_HELPERS:
             a.forceTerminate()                                                   # policy 0 = regular (Dock) app
     for name in DIALOG_HELPERS:
