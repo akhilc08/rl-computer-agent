@@ -29,8 +29,8 @@ from urllib.parse import urlparse
 import Quartz
 from AppKit import NSApplicationActivateIgnoringOtherApps, NSWorkspace
 from Foundation import NSDate, NSRunLoop
-from ApplicationServices import AXUIElementCreateApplication, AXUIElementSetAttributeValue, AXValueCreate, \
-    kAXValueCGPointType, kAXValueCGSizeType
+from ApplicationServices import AXUIElementCreateApplication, AXUIElementCreateSystemWide, \
+    AXUIElementSetAttributeValue, AXUIElementSetMessagingTimeout, AXValueCreate, kAXValueCGPointType, kAXValueCGSizeType
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
@@ -330,6 +330,8 @@ def main():
     ap.add_argument("--reseed_every", type=int, default=4, help="rounds between content reseeds")
     ap.add_argument("--out", default=str(ROOT / "data/sandbox" / datetime.now().strftime("%Y%m%d-%H%M%S")))
     args = ap.parse_args()
+    # A hung app otherwise blocks an AX call forever (seen: 40+ min stall); set on system-wide it applies globally.
+    AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 3.0)
     c = Collector(args.out, args.per_app_new, args.patience)
     deadline, rnd = time.time() + args.hours * 3600, 0
     while time.time() < deadline:
