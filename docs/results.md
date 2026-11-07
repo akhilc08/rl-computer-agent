@@ -392,3 +392,44 @@ Kev was scored on the original 429 Mac val commands, and screenshot models only 
 - **Small instruct LLMs are poor at this out of the box.** Qwen3-1.7B is the best of them (49 on ScreenSpot-v2, 35 on Mac val). SmolLM2-360M and Qwen2.5-0.5B pick the first option 87–96% of the time, so their ~30% on Mind2Web and WebLINX is just the ranker's top-1 rate, not real decisions.
 - **AndroidControl (real accessibility trees): trained Kev gets 71.6%, the best of every list model** (next: Qwen2.5-1.5B 50.0, model2vec 49.8, MindAct-large 42.6), at 92 ms. The screenshot models do better here (UI-Venus-8B 93.6, TinyClick 89.8 at about 140 ms); Kev has never trained on phone screens.
 - **WebLINX is weak for Kev (17.2%)**, behind WebLINX's own flan-T5 (30.6) and the screenshot models (29–38). Like Mind2Web, its commands are chat turns that need dialogue context, not direct commands.
+
+## Option sources v2: 3,158 screens, 153 apps (2026-11-07)
+
+Which detector and merge rule to use to build Kev's option list, scored against dense element boxes
+(`scripts/eval/optbench2_*.py`; detectors on an A10G, Apple Vision OCR on an EC2 Mac). Recall = share of
+clickable elements with an option center inside them. Options = list length after merging near-duplicates.
+
+- **GroundCUA** (2,131 screens, 87 desktop apps, people boxed every element). GPA-GUI-Detector was almost
+  certainly trained on it (mean best IoU 0.80 vs ~0.48 for the others; it boxes 97% of the non-clickable
+  "Information Display" text), so GPA's numbers there are not a fair test.
+- **Screen2AX** (158 macOS screens, MacPaw). MacPaw's YOLO was trained on this data, so its numbers are not fair here.
+- **Sandbox** (869 screens from our EC2 Mac collector, ~50 apps and sites). Targets are the live AX elements, so it
+  measures how much of AX a pixel method recovers. It cannot show what AX misses; that needs hand labels.
+
+### Clickable recall at conf 0.15 (union)
+
+| method | Screen2AX (Mac, held out) | Sandbox (AX recovered) | GroundCUA | options (S2AX) | ms |
+|---|---|---|---|---|---|
+| OCR fast (≤6 words) | 51.2 | 44.1 | 30.5 | 32 | 48 |
+| GPA @640 | 81.1 | 50.4 | *97.2 (trained on it)* | 41 | 28 |
+| OmniParser v2 @640 | 66.2 | 45.2 | 68.1 | 25 | 27 |
+| OmniParser v3 @1280 | 67.9 | 52.3 | 78.9 | 27 | 207 |
+| UI-DETR-1 @1600 | 91.0 | 64.3 | 93.7 | 105 | 320 |
+| OCR + GPA @640 | 84.9 | 57.8 | *97.6* | 72 | 50 |
+| OCR + UI-DETR @1600 | 91.8 | 64.8 | 94.0 | 131 | 320 |
+| OCR + UI-DETR @1600, conf 0.3 | 87.7 | 62.4 | 88.3 | 83 | 320 |
+| OCR + GPA @640, conf 0.05 | 86.7 | 59.6 | *98.8* | 82 | 50 |
+
+### What this shows
+
+- **GPA stays the pick.** At the same list length (~82 options) OCR + GPA scores 86.7 on held-out Mac screens vs
+  87.7 for OCR + UI-DETR, at 50 ms vs 320 ms. UI-DETR's lead at conf 0.15 comes from listing 105-130 options, most
+  of them noise (precision 39% vs 49-54% for GPA).
+- **OCR is worth adding**: +3-4 points over a detector alone at little cost. Fast OCR is enough; accurate OCR is 5x
+  slower (250 ms) and adds about 1 point when combined.
+- **Two detectors don't help.** Every two-detector "fill" combination scores below OCR + GPA alone.
+- **Pixels recover only 55-65% of AX on real Mac UI**, so AX remains the backbone wherever it exists. Gating the
+  detector to AX-poor screens (gate10) gives the shortest lists (81 vs 100 options) at equal AX recall, but whether
+  the detector's extra boxes are real targets AX missed can only be settled with hand labels.
+- Decision: **AX + fast OCR (≤6 words) + GPA @640** (union, conf 0.05-0.15). About 120-130 ms on an M5 with the
+  parts in parallel.
