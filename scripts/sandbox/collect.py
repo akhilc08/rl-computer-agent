@@ -274,6 +274,7 @@ class Collector:
         app = launch(app_name)
         if app is None:
             return "not installed"
+        rlca_ax._timeouts = 0              # the hung-app count starts fresh for each app
         pid = app.processIdentifier()
         if start_url:
             sh(["open", "-a", app_name, start_url])
@@ -332,7 +333,8 @@ def main():
     ap.add_argument("--out", default=str(ROOT / "data/sandbox" / datetime.now().strftime("%Y%m%d-%H%M%S")))
     args = ap.parse_args()
     # A hung app otherwise blocks an AX call forever (seen: 40+ min stall); set on system-wide it applies globally.
-    AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 3.0)
+    # 3 s was too short: heavy apps (Blender, Krita, OBS) and big pages in Safari answer slowly while loading on an M1.
+    AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 8.0)
     rlca_ax.HUNG_LIMIT = 3     # and three timeouts in a row abandon the app instead of walking its whole tree
     c = Collector(args.out, args.per_app_new, args.patience)
     deadline, rnd = time.time() + args.hours * 3600, 0
