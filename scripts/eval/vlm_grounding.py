@@ -254,6 +254,9 @@ def parse_tinyclick(text):
     return (m.group(1).strip() if m else None), ((int(p.group(1)), int(p.group(2))) if p else None)
 
 
+TINYCLICK_MAX_TEXT = 400
+
+
 def tinyclick(repo, args):
     from transformers import AutoModelForCausalLM, AutoProcessor
     proc = AutoProcessor.from_pretrained(repo, trust_remote_code=True)
@@ -261,6 +264,9 @@ def tinyclick(repo, args):
 
     def predict(img, instruction, _set):
         text = (TINYCLICK_PROMPT + instruction.strip()).lower()
+        ids = proc.tokenizer(text, add_special_tokens=False)["input_ids"]
+        if len(ids) > TINYCLICK_MAX_TEXT:            # Florence-2's 1024 positions also hold 577 image tokens; long
+            text = proc.tokenizer.decode(ids[:TINYCLICK_MAX_TEXT])   # WebLINX chat turns overflow it (CUDA assert)
         inputs = proc(images=img, text=text, return_tensors="pt", do_resize=True).to("cuda")
         out = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
         raw = proc.batch_decode(out.sequences, skip_special_tokens=False)[0]
