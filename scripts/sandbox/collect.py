@@ -29,7 +29,7 @@ from urllib.parse import urlparse
 import Quartz
 from AppKit import NSApplicationActivateIgnoringOtherApps, NSWorkspace
 from Foundation import NSDate, NSRunLoop
-from ApplicationServices import AXUIElementCreateApplication, AXUIElementCreateSystemWide, \
+from ApplicationServices import AXUIElementCreateApplication, AXUIElementCreateSystemWide, AXUIElementPerformAction, \
     AXUIElementSetAttributeValue, AXUIElementSetMessagingTimeout, AXValueCreate, kAXValueCGPointType, kAXValueCGSizeType
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -133,6 +133,40 @@ def launch(name):
         app.activateWithOptions_(NSApplicationActivateIgnoringOtherApps)
         time.sleep(1)
     return app
+
+
+KEEP_RUNNING = {"Finder"}
+DIALOG_HELPERS = ["UserNotificationCenter", "Problem Reporter", "AddPrinter", "CoreServicesUIAgent", "storeuid"]
+
+
+def sweep():
+    """Close what clicking left behind between apps: other apps it opened (Add Printer, Transmission...), crash
+    reports, permission prompts and the Force Quit window. They pile up over hours, cover the screen and stall AX."""
+    NSRunLoop.currentRunLoop().runUntilDate_(NSDate.dateWithTimeIntervalSinceNow_(0.2))
+    for a in NSWorkspace.sharedWorkspace().runningApplications():
+        name, exe = a.localizedName(), str(a.executableURL().lastPathComponent() if a.executableURL() else "")
+        if (a.activationPolicy() == 0 and name not in KEEP_RUNNING) or name in DIALOG_HELPERS or exe in DIALOG_HELPERS:
+            a.forceTerminate()                                                   # policy 0 = regular (Dock) app
+    for name in DIALOG_HELPERS:
+        sh(["pkill", "-9", "-x", name])
+    sh(["pkill", "-9", "-f", "/storeuid.app/"])          # App Store sign-in sheet; ignores terminate
+    # Persistent notifications ("Time Machine can back up...", "X added an extension") stack up in the corner of
+    # every screenshot; dropping the delivered-notifications store and restarting the daemons clears them.
+    for f in (Path.home() / "Library/Group Containers/group.com.apple.usernoted/db2").glob("db*"):
+        f.unlink(missing_ok=True)
+    sh("pkill -x usernoted; pkill -x NotificationCenter")
+    # Finder windows and the Force Quit window (loginwindow) can't be quit; press their close buttons over AX
+    # (AppleScript to Finder would raise an Automation permission prompt).
+    wins = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly, 0) or []
+    pids = {w["kCGWindowOwnerPID"] for w in wins if w.get("kCGWindowLayer", 0) <= 8 and (
+        w.get("kCGWindowOwnerName") == "Finder" or w.get("kCGWindowName") == "Force Quit Applications")}
+    for _ in range(4):                                   # closing one Finder window can reveal another
+        for pid in pids:
+            for aw in attr(AXUIElementCreateApplication(pid), "AXWindows") or []:
+                if (btn := attr(aw, "AXCloseButton")) is not None:
+                    AXUIElementPerformAction(btn, "AXPress")
+        time.sleep(0.3)
+    time.sleep(1)
 
 
 def quit_app(name):
@@ -364,6 +398,7 @@ def main():
                   flush=True)
             if why == "mouse in corner":
                 return
+            sweep()
         quit_app("Safari")
         rnd += 1
 
