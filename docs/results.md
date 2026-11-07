@@ -303,7 +303,7 @@ Live AX needs a bit more:
 
 ## Every model on every benchmark (2026-11-07)
 
-Every model except Kev was run on every benchmark it can run. Kev wasn't rerun (its numbers are from the sections above), so it has no WebLINX or AndroidControl score yet. Each set is the same fixed sample for every model (`data/records_s`, seed 0): 500 per set, 519/521 on the Mind2Web website/domain splits, and Mac val = 809 (the old 429 plus 380 Slack, Notes and Notion commands). Screenshot models see the screenshot and must click inside the target's box; every other model picks from the element list. Table: `python3 scripts/eval/results_table.py`; outputs in `runs/webagents`, `runs/list-baselines`, `runs/vlm`.
+Every model was run on every benchmark it can run. Kev's numbers on the older sets are from the sections above; its WebLINX and AndroidControl runs were added on 2026-11-07 (A10G median 92 ms on AndroidControl, 139 ms on WebLINX). Each set is the same fixed sample for every model (`data/records_s`, seed 0): 500 per set, 519/521 on the Mind2Web website/domain splits, and Mac val = 809 (the old 429 plus 380 Slack, Notes and Notion commands). Screenshot models see the screenshot and must click inside the target's box; every other model picks from the element list. Table: `python3 scripts/eval/results_table.py`; outputs in `runs/webagents`, `runs/list-baselines`, `runs/vlm`.
 
 New benchmarks:
 - **AndroidControl, low-level split** (`scripts/data/convert_androidcontrol.py`): direct step instructions with real accessibility trees, 1,288 test steps across 237 apps.
@@ -313,8 +313,8 @@ New benchmarks:
 
 | Group | Model | M2W task | M2W web | M2W domain | WebLINX | AndroidControl | SS-v2 | SS-Pro | OSWorld-G | MMBench | OmniACT | Mac val | NeetCode |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Kev | Kev 0.8B (after training) | 7.6 | 10.6 | 10.8 | – | – | 68.8 | 26.8 | 28.2 | 37.8 | 60.2 | 90.4 | 86.0 |
-| Kev | Kev 0.8B (before training) | 2.4 | 3.3 | 4.0 | – | – | 53.0 | 27.4 | 24.6 | 30.8 | 42.4 | 66.0 | 75.2 |
+| Kev | Kev 0.8B (after training) | 7.6 | 10.6 | 10.8 | 17.2 | 71.6 | 68.8 | 26.8 | 28.2 | 37.8 | 60.2 | 90.4 | 86.0 |
+| Kev | Kev 0.8B (before training) | 2.4 | 3.3 | 4.0 | 9.4 | 57.6 | 53.0 | 27.4 | 24.6 | 30.8 | 42.4 | 66.0 | 75.2 |
 | MindAct | mindact-base | 49.8 | 37.6 | 38.0 | 18.0 | 42.0 | 33.4 | 18.8 | 16.4 | 13.8 | 20.2 | 37.9 | 26.4 |
 | MindAct | mindact-large | 56.2 | 43.5 | 44.7 | 18.4 | 42.6 | 37.8 | 17.2 | 16.2 | 18.2 | 23.6 | 49.9 | 35.4 |
 | MindAct | mindact-xl | 60.0 | 46.8 | 48.6 | 19.6 | 34.6 | 22.6 | 24.0 | 22.6 | 13.8 | 18.2 | 50.1 | 37.8 |
@@ -390,4 +390,5 @@ Kev was scored on the original 429 Mac val commands, and screenshot models only 
 - **TinyClick is the fastest accurate screenshot model** (~0.14 s; 81 on ScreenSpot-v2, 90 on AndroidControl), but it collapses on dense professional screens (4% on ScreenSpot-Pro) and on our Mac screens (55–60%).
 - **Among list models, nothing open comes close to Kev on our data.** MindAct only wins on Mind2Web, which it trained on. model2vec, a plain embedding match, is a surprisingly strong floor on our screens (57–73%): our commands often reuse the element's label.
 - **Small instruct LLMs are poor at this out of the box.** Qwen3-1.7B is the best of them (49 on ScreenSpot-v2, 35 on Mac val). SmolLM2-360M and Qwen2.5-0.5B pick the first option 87–96% of the time, so their ~30% on Mind2Web and WebLINX is just the ranker's top-1 rate, not real decisions.
-- **AndroidControl looks easy for screenshot models** (85–94%) and moderate for list models (35–50%). Kev hasn't been run on it yet.
+- **AndroidControl (real accessibility trees): trained Kev gets 71.6%, the best of every list model** (next: Qwen2.5-1.5B 50.0, model2vec 49.8, MindAct-large 42.6), at 92 ms. The screenshot models do better here (UI-Venus-8B 93.6, TinyClick 89.8 at about 140 ms); Kev has never trained on phone screens.
+- **WebLINX is weak for Kev (17.2%)**, behind WebLINX's own flan-T5 (30.6) and the screenshot models (29–38). Like Mind2Web, its commands are chat turns that need dialogue context, not direct commands.
