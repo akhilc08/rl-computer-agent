@@ -30,8 +30,24 @@ MAX_DEPTH = 60
 MAX_LABEL = 80
 
 
+class AXHung(RuntimeError):
+    """The app stopped answering AX requests (raised only when HUNG_LIMIT is set)."""
+
+
+HUNG_LIMIT = None          # opt-in: raise AXHung after this many timeouts in a row (the sandbox collector sets it)
+_timeouts = 0
+
+
 def attr(el, name):
+    global _timeouts
     err, val = AXUIElementCopyAttributeValue(el, name, None)
+    if err == -25204:      # kAXErrorCannotComplete: the app did not answer within the messaging timeout
+        _timeouts += 1
+        if HUNG_LIMIT and _timeouts >= HUNG_LIMIT:
+            _timeouts = 0
+            raise AXHung(name)
+    else:
+        _timeouts = 0
     return val if err == 0 else None
 
 

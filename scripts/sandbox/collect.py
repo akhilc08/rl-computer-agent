@@ -37,6 +37,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts/data"))
 import explore as E  # noqa: E402
 from rlca import explore as X  # noqa: E402
+from rlca import ax as rlca_ax  # noqa: E402
 from rlca.ax import attr, frame_of  # noqa: E402
 from rlca.screen import all_windows  # noqa: E402
 
@@ -332,6 +333,7 @@ def main():
     args = ap.parse_args()
     # A hung app otherwise blocks an AX call forever (seen: 40+ min stall); set on system-wide it applies globally.
     AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 3.0)
+    rlca_ax.HUNG_LIMIT = 3     # and three timeouts in a row abandon the app instead of walking its whole tree
     c = Collector(args.out, args.per_app_new, args.patience)
     deadline, rnd = time.time() + args.hours * 3600, 0
     while time.time() < deadline:
@@ -354,6 +356,8 @@ def main():
                     why = c.explore("web:" + E.domain(what), "Safari", start_url=what, max_steps=60)
             except Exception as ex:          # one bad app shouldn't end a 20-hour run
                 why = f"error {type(ex).__name__}: {str(ex)[:100]}"
+                if kind == "app" and isinstance(ex, rlca_ax.AXHung):
+                    quit_app(what)
             print(f"{datetime.now():%H:%M} round {rnd} {c.mode()} {what}: {why} (states {c.run.n}, distinct {len(c.sigs)})",
                   flush=True)
             if why == "mouse in corner":
