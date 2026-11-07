@@ -35,7 +35,15 @@ PY=$(brew --prefix python@3.12)/bin/python3.12
 $PY -m venv .venv
 .venv/bin/pip install -q pyobjc-core pyobjc-framework-Quartz pyobjc-framework-Cocoa \
   pyobjc-framework-ApplicationServices pyobjc-framework-Vision pillow
-for cask in visual-studio-code libreoffice firefox vlc gimp inkscape obsidian blender; do
+# GPA-GUI-Detector for pixel clicks in AX-poor apps; collect.py loads ~/.cache/rlca/coreml/gpa_640.mlpackage (copy it in).
+.venv/bin/pip install -q ultralytics coremltools
+# Free apps that work without signing in. Weighted toward pro/creative tools whose AX trees are thin (Kev's weakest
+# screens) plus Electron, Java and Qt apps; collect.py explores every installed app, so more here means more data.
+CASKS=(visual-studio-code libreoffice firefox vlc gimp inkscape obsidian blender krita audacity obs darktable freecad
+  musescore shotcut kdenlive qgis godot scribus zotero anki calibre thunderbird joplin drawio arduino-ide sublime-text
+  handbrake transmission keka dbeaver-community gnucash openscad iina logseq zettlr marktext texstudio lmms cyberduck
+  filezilla bruno intellij-idea-ce pycharm-ce)
+for cask in "${CASKS[@]}"; do
   brew install --cask "$cask" >/dev/null 2>&1 && echo "installed $cask" || echo "skipped $cask"
 done
 # Without this each app's first launch stops on a "downloaded from the internet" prompt.

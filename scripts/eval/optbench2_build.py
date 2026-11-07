@@ -85,8 +85,9 @@ def sandbox(out, runs, per_app, seed):
         for line in open(run / "states.jsonl"):
             s = json.loads(line)
             key = (run.name, s["shot"])
-            if key not in by_app[s["app"]]:
-                by_app[s["app"]][key] = (run, s)
+            group = f"web:{s['url'].split('/')[2]}" if s["url"].startswith("http") else s["app"]   # cap per site, not per browser
+            if key not in by_app[group]:
+                by_app[group][key] = (run, s)
     ax_rows = []
     for app, shots in sorted(by_app.items()):
         for (rname, shot), (run, s) in rng.sample(sorted(shots.items()), min(per_app, len(shots))):

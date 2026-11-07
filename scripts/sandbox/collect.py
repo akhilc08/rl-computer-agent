@@ -84,6 +84,23 @@ DISPLAYPLACER = "/opt/homebrew/bin/displayplacer"
 ESC, CMD_LBRACKET = 53, 33
 
 
+# Apps never explored: they change the machine or the run (terminals, accessibility and sharing tools, migration),
+# or are covered elsewhere (Safari runs the site list). Everything else installed is fair game: more apps, more data.
+SKIP_APPS = {"Terminal", "iTerm", "iTerm2", "Migration Assistant", "Boot Camp Assistant", "Keychain Access", "Passwords",
+             "VoiceOver Utility", "Accessibility Inspector", "Directory Utility", "Bluetooth File Exchange",
+             "Wireless Diagnostics", "Feedback Assistant", "Ticket Viewer", "Screen Sharing", "System Information",
+             "Python Launcher", "Setup Assistant", "Install macOS", "App Store", "Apps", "iPhone Mirroring", "Safari"}
+
+
+def discover_apps():
+    """APPS plus every .app installed in /Applications and /System/Applications (one level, and Utilities)."""
+    found = set(APPS)
+    for d in ("/Applications", "/System/Applications", "/System/Applications/Utilities", "/Applications/Utilities"):
+        for p in Path(d).glob("*.app"):
+            found.add(p.stem)
+    return sorted(a for a in found if a not in SKIP_APPS and not a.startswith(("ENA_", "Install ", "Uninstall")))
+
+
 def sh(cmd, timeout=20):
     try:
         return subprocess.run(cmd, shell=isinstance(cmd, str), capture_output=True, text=True, timeout=timeout).stdout.strip()
@@ -163,12 +180,37 @@ def web_url(win):
     return str(u.absoluteString()) if u is not None and hasattr(u, "absoluteString") else (str(u) if u else "")
 
 
+# Pixel clicks: AX-poor apps (Blender, GIMP, Inkscape...) expose almost nothing to press, so the explorer also clicks
+# GPA-GUI-Detector boxes. Kev loses most on icon-only targets that only the detector finds, so these screens are the
+# training data it lacks. Never in apps where an unlabeled toggle could break the machine.
+AX_THIN = 8
+NO_PIXEL_APPS = {"System Settings", "Disk Utility", "Activity Monitor", "Console", "Terminal", "Script Editor"}
+GPA_COREML = Path.home() / ".cache/rlca/coreml/gpa_640.mlpackage"
+
+
 class Collector:
     def __init__(self, out, per_app_new, patience):
         self.run = E.Run(Path(out), dry=False)
         self.per_app_new, self.patience = per_app_new, patience
         self.dark, self.size = False, SIZES[0]
         self.sigs = set()
+        self.gpa = None
+
+    def pixel_boxes(self, win, sig):
+        """GPA boxes (conf >= 0.15) on the screenshot just saved for `sig`, in screen points; [] if unavailable."""
+        if not GPA_COREML.exists():
+            return []
+        from PIL import Image
+        if self.gpa is None:
+            from ultralytics import YOLO
+            self.gpa = YOLO(str(GPA_COREML), task="detect")
+        f = frame_of(win)
+        if not f:
+            return []
+        img = Image.open(self.run.out / self.run.seen[sig]).convert("RGB")
+        s = img.width / f[2]
+        r = self.gpa.predict(img, imgsz=640, conf=0.15, device="cpu", verbose=False)[0]
+        return [(f[0] + x1 / s, f[1] + y1 / s, (x2 - x1) / s, (y2 - y1) / s) for x1, y1, x2, y2 in r.boxes.xyxy.tolist()]
 
     def mode(self):
         return f"mode={'dark' if self.dark else 'light'}&size={self.size[0]}x{self.size[1]}"
@@ -181,8 +223,25 @@ class Collector:
         self.sigs.add(got[3])
         return got, new
 
-    def act(self, app_name, win, elements, handles, web):
-        """One action; -> (kind, element or None)."""
+    def act(self, app_name, win, elements, handles, web, sig):
+        """One action; -> (kind, element or None, pixel box or None)."""
+        if not web and app_name not in NO_PIXEL_APPS and random.random() < (0.7 if len(elements) < AX_THIN else 0.15):
+            try:
+                boxes = self.pixel_boxes(win, sig)
+            except Exception as ex:            # a detector failure shouldn't stop collection
+                print(f"gpa failed: {ex}", flush=True)
+                boxes = []
+            f = frame_of(win)
+            boxes = [b for b in boxes if f and f[0] <= b[0] + b[2] / 2 <= f[0] + f[2] and f[1] + 28 <= b[1] + b[3] / 2 <= f[1] + f[3]]
+            if boxes:
+                b = random.choice(boxes)
+                X.click(b[0] + b[2] / 2, b[1] + b[3] / 2)
+                return "pixel_click", None, [round(v, 1) for v in b]
+        kind, e = self._act(app_name, win, elements, handles, web)
+        return kind, e, None
+
+    def _act(self, app_name, win, elements, handles, web):
+        """One AX-driven action; -> (kind, element or None)."""
         r = random.random()
         if r < 0.08:
             X.key(ESC)
@@ -254,10 +313,10 @@ class Collector:
                 return f"done: {new_total} new"
             sid, elements, handles, sig, _, web = got
             t0 = time.time()
-            kind, e = self.act(app_name, win, elements, handles, web if start_url else None)
+            kind, e, box = self.act(app_name, win, elements, handles, web if start_url else None, sig)
             time.sleep(1.5 if start_url else 1.0)
             self.run.log(before=sid, target=target, app=app_name, kind=kind, element=asdict(e) if e else None,
-                         secs=round(time.time() - t0, 2), mode=self.mode())
+                         box=box, secs=round(time.time() - t0, 2), mode=self.mode())
         return f"steps out: {new_total} new"
 
 
@@ -280,7 +339,7 @@ def main():
         set_screen(c.size)
         if rnd and rnd % args.reseed_every == 0:
             sh(f"RLCA_SANDBOX=1 {ROOT}/scripts/vm/seed_content.sh", timeout=600)
-        jobs = [("app", a) for a in APPS] + [("site", s) for s in SITES]
+        jobs = [("app", a) for a in discover_apps()] + [("site", s) for s in SITES]
         random.shuffle(jobs)
         for kind, what in jobs:
             if time.time() >= deadline:
