@@ -2,6 +2,10 @@
 
   .venv/bin/python scripts/data/sandbox_dataset.py clean   # data/sandbox_aws/*/*  ->  data/sandbox_ds/screens.jsonl
   .venv/bin/python scripts/data/sandbox_dataset.py split   # -> data/sandbox_ds/splits.json (frozen, by app/site)
+  .venv/bin/python scripts/data/sandbox_dataset.py sources # -> data/sandbox_ds/options.jsonl (AX + fast OCR + GPA@640)
+
+sources: Kev's runtime option list for every screen (ids a* = AX, o* = OCR-only text, d* = detector-only
+icon), plus the raw OCR lines and GPA boxes down to conf 0.05 and per-source ms. ~18 min on an M-series laptop.
 
 clean: one row per screenshot (states that share a screenshot are the same screen). Drops blank or
 near-uniform frames, then near-duplicates inside each app: same window size and colour mode, 256-bit
@@ -157,8 +161,66 @@ def split(seed=0):
         print(sp, sum(v == sp for v in assign.values()), "apps", c[(sp, "screens")], "screens", c[(sp, "ax_poor")], "ax-poor")
 
 
+GPA_COREML = Path.home() / ".cache/rlca/coreml/gpa_640.mlpackage"
+GPA_KEEP, GPA_USE, MAX_OCR_WORDS = 0.05, 0.15, 6
+
+
+def sources():
+    """Kev's option list per screen: AX + fast Apple Vision OCR (<= 6 words) + GPA@640, merged as at runtime.
+    Resumable: appends to options.jsonl and skips screens already done."""
+    import sys
+    import time
+    from types import SimpleNamespace
+
+    import objc
+    import Quartz
+    from ultralytics import YOLO
+    sys.path.insert(0, str(ROOT / "src"))
+    from rlca.ocr import ocr_lines
+    from rlca.sources import merge
+
+    rows = [json.loads(l) for l in open(OUT / "screens.jsonl")]
+    path = OUT / "options.jsonl"
+    done = {json.loads(l)["id"] for l in open(path)} if path.exists() else set()
+    gpa = YOLO(str(GPA_COREML), task="detect")
+    t_start = time.time()
+    with open(path, "a") as out:
+        for i, r in enumerate(rows):
+            if r["id"] in done:
+                continue
+            with objc.autorelease_pool():
+                shot = ROOT / r["shot"]
+                src = Quartz.CGImageSourceCreateWithURL(Quartz.CFURLCreateWithFileSystemPath(None, str(shot), 0, False), None)
+                cg = Quartz.CGImageSourceCreateImageAtIndex(src, 0, None)
+                f = r["frame"]
+                t0 = time.perf_counter()
+                ocr = [l for l in ocr_lines(cg, f, fast=True)]
+                t1 = time.perf_counter()
+                img = Image.open(shot).convert("RGB")
+                s = img.width / f[2]
+                p = gpa.predict(img, imgsz=640, conf=GPA_KEEP, device="cpu", verbose=False)[0]
+                t2 = time.perf_counter()
+            det = [{"box": (round(f[0] + x1 / s), round(f[1] + y1 / s), round((x2 - x1) / s), round((y2 - y1) / s)), "conf": round(c, 3)}
+                   for (x1, y1, x2, y2), c in zip(p.boxes.xyxy.tolist(), p.boxes.conf.tolist())]
+            ax = [SimpleNamespace(frame=tuple(t["box"]), label=t["label"], role=t["role"], context=t.get("context", []))
+                  for t in r["targets"] if t["source"] == "ax" and t["box"]]
+            short = [l for l in ocr if len(l["text"].split()) <= MAX_OCR_WORDS]
+            items, _ = merge(ax, short, [d for d in det if d["conf"] >= GPA_USE], f)
+            opts, n = [], collections.Counter()
+            for it in items:
+                k = "a" if "ax" in it.sources else "o" if "ocr" in it.sources else "d"
+                opts.append({"id": f"{k}{n[k]}", "sources": sorted(it.sources), "role": it.role, "label": it.label,
+                             "context": it.context, "box": list(it.box), "ax_index": it.ax_index})
+                n[k] += 1
+            out.write(json.dumps({"id": r["id"], "options": opts, "ocr": ocr, "gpa": det,
+                                  "ms": {"ocr_fast": round((t1 - t0) * 1000, 1), "gpa640": round((t2 - t1) * 1000, 1)}}) + "\n")
+            if i % 250 == 0:
+                out.flush()
+                print(f"{i}/{len(rows)} {time.time() - t_start:.0f}s", flush=True)
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["clean", "split"])
+    ap.add_argument("step", choices=["clean", "split", "sources"])
     a = ap.parse_args()
-    clean() if a.step == "clean" else split()
+    {"clean": clean, "split": split, "sources": sources}[a.step]()
