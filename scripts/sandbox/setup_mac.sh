@@ -43,6 +43,7 @@ CASKS=(visual-studio-code libreoffice firefox vlc gimp inkscape obsidian blender
   musescore shotcut kdenlive qgis godot scribus zotero anki calibre thunderbird joplin drawio arduino-ide sublime-text
   handbrake transmission keka dbeaver-community gnucash openscad iina logseq zettlr marktext texstudio lmms cyberduck
   filezilla bruno intellij-idea-ce pycharm-ce)
+[[ -n "$RLCA_CASKS" ]] && CASKS=(${=RLCA_CASKS})   # e.g. only the apps a targeted re-collection needs
 for cask in "${CASKS[@]}"; do
   brew install --cask "$cask" >/dev/null 2>&1 && echo "installed $cask" || echo "skipped $cask"
 done
