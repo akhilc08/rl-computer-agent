@@ -219,8 +219,46 @@ def sources():
                 print(f"{i}/{len(rows)} {time.time() - t_start:.0f}s", flush=True)
 
 
+BLANK_STD, MISMATCH = 3.0, 0.3
+
+
+def visible():
+    """Mark AX options the screenshot doesn't show. The collector captured only the main window, so sheets,
+    popovers, autocomplete lists and open menus (separate windows) are in the AX list but not the image, and
+    Safari's toolbar is often blank. An a* option is not visible when its box is off the image or its pixels
+    are flat (grayscale std < BLANK_STD). Screens with more than MISMATCH of their AX options hidden get
+    capture_mismatch=true. Rewrites options.jsonl in place."""
+    screens = {json.loads(l)["id"]: json.loads(l) for l in open(OUT / "screens.jsonl")}
+    path = OUT / "options.jsonl"
+    rows = [json.loads(l) for l in open(path)]
+    hidden_total = mism = 0
+    for r in rows:
+        s = screens[r["id"]]
+        img = np.asarray(Image.open(ROOT / s["shot"]).convert("L"), dtype=np.float32)
+        f, k = s["frame"], img.shape[1] / s["frame"][2]
+        n_ax = n_hidden = 0
+        for o in r["options"]:
+            if o["id"][0] != "a":
+                o["visible"] = True
+                continue
+            b = o["box"]
+            x0, y0 = max(0, int((b[0] - f[0]) * k)), max(0, int((b[1] - f[1]) * k))
+            x1, y1 = min(img.shape[1], int((b[0] + b[2] - f[0]) * k)), min(img.shape[0], int((b[1] + b[3] - f[1]) * k))
+            crop = img[y0:y1, x0:x1]
+            o["visible"] = bool(crop.size and crop.std() >= BLANK_STD)
+            n_ax += 1
+            n_hidden += not o["visible"]
+        r["hidden_ax"] = n_hidden
+        r["capture_mismatch"] = bool(n_ax and n_hidden / n_ax > MISMATCH)
+        hidden_total += n_hidden
+        mism += r["capture_mismatch"]
+    with open(path, "w") as f:
+        f.writelines(json.dumps(r) + "\n" for r in rows)
+    print(f"{hidden_total} hidden AX options; {mism}/{len(rows)} screens flagged capture_mismatch")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["clean", "split", "sources"])
+    ap.add_argument("step", choices=["clean", "split", "sources", "visible"])
     a = ap.parse_args()
-    {"clean": clean, "split": split, "sources": sources}[a.step]()
+    {"clean": clean, "split": split, "sources": sources, "visible": visible}[a.step]()

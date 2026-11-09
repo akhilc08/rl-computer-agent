@@ -428,8 +428,29 @@ clickable elements with an option center inside them. Options = list length afte
 - **OCR is worth adding**: +3-4 points over a detector alone at little cost. Fast OCR is enough; accurate OCR is 5x
   slower (250 ms) and adds about 1 point when combined.
 - **Two detectors don't help.** Every two-detector "fill" combination scores below OCR + GPA alone.
-- **Pixels recover only 55-65% of AX on real Mac UI**, so AX remains the backbone wherever it exists. Gating the
+- **Pixels recover only 55-65% of AX on real Mac UI**, so AX remains the backbone wherever it exists. *Correction
+  (2026-11-08): this understates pixels. The sandbox screenshots are missing the window toolbar on ~75% of
+  screens and sheets/popups on ~14% (see "Sandbox dataset" below), so the detector never saw those AX targets.* Gating the
   detector to AX-poor screens (gate10) gives the shortest lists (81 vs 100 options) at equal AX recall, but whether
   the detector's extra boxes are real targets AX missed can only be settled with hand labels.
 - Decision: **AX + fast OCR (≤6 words) + GPA @640** (union, conf 0.05-0.15). About 120-130 ms on an M5 with the
   parts in parallel.
+
+## Sandbox dataset (2026-11-08)
+
+Three EC2 Macs ran the collector for 20 h each (`scripts/sandbox/collect.py`): 33,290 screenshots. After
+`scripts/data/sandbox_dataset.py` (clean, split, sources, visible):
+
+- **19,898 screens, 115 apps/sites** (40 websites); 13,258 near-duplicates and 134 blank frames dropped. Light and
+  dark mode, four window sizes. 1,481 screens are AX-poor (< 8 labelled AX elements).
+- **Split by app, frozen** (`data/sandbox_ds/splits.json`): train 80 apps / 14,291 screens, val 12 / 2,082, test 23 / 3,525.
+- **Option list per screen** (AX + fast OCR + GPA@640): on average 61 AX, 13 OCR-only and 7 detector-only options;
+  OCR 24 ms and GPA 23 ms median on the laptop.
+- **Capture gap.** The collector's window capture left the toolbar strip blank on 14,936 screens (75%; Safari's
+  tab bar and toolbar, app toolbars) and missed sheets, popovers, autocomplete lists and open menus, which are
+  separate windows, on ~2,800 screens. The AX tree still lists those controls, so AX targets stay valid, but
+  each AX option now carries `visible` and screens with more than 30% hidden carry `capture_mismatch`. Worth
+  checking whether Kev's runtime capture has the same gap on macOS 26.
+- **Commands (Claude drafts)** on 200 screens (100 train, 100 test, 103 apps), from `scripts/data/sandbox_label.py`:
+  2,674 commands and 893 icon captions; 20% of commands target a detector-only icon, 10% are absent. The test
+  drafts still need a human pass.
