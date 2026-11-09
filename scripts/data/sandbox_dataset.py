@@ -3,6 +3,8 @@
   .venv/bin/python scripts/data/sandbox_dataset.py clean   # data/sandbox_aws/*/*  ->  data/sandbox_ds/screens.jsonl
   .venv/bin/python scripts/data/sandbox_dataset.py split   # -> data/sandbox_ds/splits.json (frozen, by app/site)
   .venv/bin/python scripts/data/sandbox_dataset.py sources # -> data/sandbox_ds/options.jsonl (AX + fast OCR + GPA@640)
+  .venv/bin/python scripts/data/sandbox_dataset.py visible # marks AX options the screenshot doesn't show
+  .venv/bin/python scripts/data/sandbox_dataset.py pixel   # -> data/sandbox_ds/pixel_eval.jsonl (use for pixel work)
 
 sources: Kev's runtime option list for every screen (ids a* = AX, o* = OCR-only text, d* = detector-only
 icon), plus the raw OCR lines and GPA boxes down to conf 0.05 and per-source ms. ~18 min on an M-series laptop.
@@ -257,8 +259,27 @@ def visible():
     print(f"{hidden_total} hidden AX options; {mism}/{len(rows)} screens flagged capture_mismatch")
 
 
+def pixel():
+    """The subset fit for pixel work (detector/OCR scoring, image training): screens without capture_mismatch,
+    keeping only options the screenshot shows. -> pixel_eval.jsonl {id, app, split, options}."""
+    split = json.load(open(OUT / "splits.json"))["apps"]
+    screens = {json.loads(l)["id"]: json.loads(l) for l in open(OUT / "screens.jsonl")}
+    kept = dropped_opts = 0
+    with open(OUT / "pixel_eval.jsonl", "w") as out:
+        for line in open(OUT / "options.jsonl"):
+            r = json.loads(line)
+            if r["capture_mismatch"]:
+                continue
+            opts = [o for o in r["options"] if o["visible"]]
+            dropped_opts += len(r["options"]) - len(opts)
+            app = screens[r["id"]]["app"]
+            out.write(json.dumps({"id": r["id"], "app": app, "split": split[app], "options": opts}) + "\n")
+            kept += 1
+    print(f"{kept} screens for pixel work ({len(screens) - kept} mismatched left out); {dropped_opts} hidden options dropped")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["clean", "split", "sources", "visible"])
+    ap.add_argument("step", choices=["clean", "split", "sources", "visible", "pixel"])
     a = ap.parse_args()
-    {"clean": clean, "split": split, "sources": sources, "visible": visible}[a.step]()
+    {"clean": clean, "split": split, "sources": sources, "visible": visible, "pixel": pixel}[a.step]()

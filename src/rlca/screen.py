@@ -15,6 +15,9 @@ from PIL import Image
 
 from .ax import attr, frame_of
 
+# True: capture the screen inside the window's frame with every on-screen window composited (what a user sees).
+# False: capture only the window itself, even when covered (misses sheets/popups/menus and macOS 26 toolbars).
+COMPOSITE = False
 
 def ax_window(pid):
     """-> (AX window or None, whether it is minimized)."""
@@ -93,11 +96,18 @@ def capture_window(pid, window=None):
     out = {"window": win, "minimized": minimized, "frame": frame, "image": None, "cgimage": None, "scale": None}
     if minimized or frame is None:
         return out
-    wid = window_number(win) or cg_window_id(pid, frame)
-    if wid is None:
-        return out
-    cg = Quartz.CGWindowListCreateImage(Quartz.CGRectNull, Quartz.kCGWindowListOptionIncludingWindow, wid,
-                                        Quartz.kCGWindowImageBoundsIgnoreFraming)
+    if COMPOSITE:
+        # What a person sees in the window's rectangle: sheets, popovers, autocomplete lists and menus are
+        # separate windows, and a one-window capture also left macOS 26 toolbars blank. Needs the window in front.
+        rect = Quartz.CGRectMake(*frame)
+        cg = Quartz.CGWindowListCreateImage(rect, Quartz.kCGWindowListOptionOnScreenOnly, Quartz.kCGNullWindowID,
+                                            Quartz.kCGWindowImageDefault)
+    else:
+        wid = window_number(win) or cg_window_id(pid, frame)
+        if wid is None:
+            return out
+        cg = Quartz.CGWindowListCreateImage(Quartz.CGRectNull, Quartz.kCGWindowListOptionIncludingWindow, wid,
+                                            Quartz.kCGWindowImageBoundsIgnoreFraming)
     if cg is None:
         return out
     out.update(cgimage=cg, image=to_pil(cg), scale=Quartz.CGImageGetWidth(cg) / frame[2])
