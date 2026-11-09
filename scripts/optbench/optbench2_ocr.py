@@ -3,7 +3,7 @@
 Boxes come out in image pixels with the line text as the class, in the same row format optbench_detect.py writes:
 {"key", "ms", "boxes": [[x, y, w, h, conf, text], ...]}. Runs headless (Vision needs no GUI session or TCC grant).
 
-  python scripts/eval/optbench2_ocr.py --bench data/option_bench2
+  python scripts/optbench/optbench2_ocr.py --bench data/option_bench2
 """
 import argparse
 import json

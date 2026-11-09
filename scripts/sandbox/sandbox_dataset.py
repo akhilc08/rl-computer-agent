@@ -1,10 +1,10 @@
 """Turn the raw EC2 Mac sandbox runs into a clean screen set with an app-level split.
 
-  .venv/bin/python scripts/data/sandbox_dataset.py clean   # data/sandbox_aws/*/*  ->  data/sandbox_ds/screens.jsonl
-  .venv/bin/python scripts/data/sandbox_dataset.py split   # -> data/sandbox_ds/splits.json (frozen, by app/site)
-  .venv/bin/python scripts/data/sandbox_dataset.py sources # -> data/sandbox_ds/options.jsonl (AX + fast OCR + GPA@640)
-  .venv/bin/python scripts/data/sandbox_dataset.py visible # marks AX options the screenshot doesn't show
-  .venv/bin/python scripts/data/sandbox_dataset.py pixel   # -> data/sandbox_ds/pixel_eval.jsonl (use for pixel work)
+  .venv/bin/python scripts/sandbox/sandbox_dataset.py clean   # data/sandbox_aws/*/*  ->  data/sandbox_ds/screens.jsonl
+  .venv/bin/python scripts/sandbox/sandbox_dataset.py split   # -> data/sandbox_ds/splits.json (frozen, by app/site)
+  .venv/bin/python scripts/sandbox/sandbox_dataset.py sources # -> data/sandbox_ds/options.jsonl (AX + fast OCR + GPA@640)
+  .venv/bin/python scripts/sandbox/sandbox_dataset.py visible # marks AX options the screenshot doesn't show
+  .venv/bin/python scripts/sandbox/sandbox_dataset.py pixel   # -> data/sandbox_ds/pixel_eval.jsonl (use for pixel work)
 
 sources: Kev's runtime option list for every screen (ids a* = AX, o* = OCR-only text, d* = detector-only
 icon), plus the raw OCR lines and GPA boxes down to conf 0.05 and per-source ms. ~18 min on an M-series laptop.

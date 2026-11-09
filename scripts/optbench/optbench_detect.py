@@ -12,7 +12,7 @@ Sources (name[:imgsz]):
   florence_rp          Florence-2-base region proposals
   screenvlm            ScreenVLM (316M) asked to list every element
 
-  python scripts/eval/optbench_detect.py --source omni_v2:1280 [--limit 50] [--sets explore,omniact]
+  python scripts/optbench/optbench_detect.py --source omni_v2:1280 [--limit 50] [--sets explore,omniact]
 """
 import argparse
 import json

@@ -13,7 +13,7 @@ pixel sources miss the target. Resumable: screenshots already in screens.jsonl a
 ScreenSpot-v2, ScreenSpot-Pro, OSWorld-G and MMBench-GUI (level 2) are public benchmarks, so they get split
 "eval" and stay out of training. ScreenSpot v1 is skipped (v2 is its corrected re-release).
 
-  .venv/bin/python scripts/data/convert_public.py --set screenspot_v2 [--limit 20]
+  .venv/bin/python scripts/public/convert_public.py --set screenspot_v2 [--limit 20]
   sets: screenspot_v2 screenspot_pro omniact os_atlas_macos os_atlas_linux osworld_g mmbench_gui
 """
 import argparse

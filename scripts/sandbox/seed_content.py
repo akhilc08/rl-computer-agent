@@ -6,7 +6,7 @@ sandboxes don't all show the same screens. Tops up only: each app is seeded when
 items than its target, since the collector deletes things and calls this again every few rounds.
 Refuses to run unless RLCA_SANDBOX=1.
 
-  RLCA_SANDBOX=1 python scripts/vm/seed_content.py
+  RLCA_SANDBOX=1 python scripts/sandbox/seed_content.py
 """
 import argparse
 import csv

@@ -1,7 +1,7 @@
 """Save an accessibility snapshot of each running app to data/snapshots/.
 
 Snapshots contain visible on-screen text, so data/ is git-ignored.
-Usage: python scripts/data/capture_snapshots.py [AppName ...]
+Usage: python scripts/collect/capture_snapshots.py [AppName ...]
 """
 import json
 import sys

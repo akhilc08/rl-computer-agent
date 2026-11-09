@@ -24,7 +24,7 @@ elements with pixel boxes, the target's gt_box in pixels; turns without a screen
 only). Downloads only the files the sample needs (replay.json, metadata.json, the turn's page HTML and screenshot)
 into data/public/weblinx/demonstrations/<demo>/. Nothing here loads a pickle.
 
-  python scripts/data/convert_weblinx.py                  (GPU box; CPU only, ~10 GB of candidate files)
+  python scripts/public/convert_weblinx.py                  (GPU box; CPU only, ~10 GB of candidate files)
 """
 import argparse
 import csv

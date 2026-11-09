@@ -24,7 +24,7 @@ editable field. Other actions (scroll, open_app, back, home, wait) and unmatched
 Writes data/converted/androidcontrol/{screens,examples,stats}.jsonl/json and screenshots to
 data/public/androidcontrol/images/. Split "eval" (it's a public benchmark; keep it out of training).
 
-  python scripts/data/convert_androidcontrol.py [--n 2000] [--seed 0] [--pool_steps 4000]
+  python scripts/public/convert_androidcontrol.py [--n 2000] [--seed 0] [--pool_steps 4000]
 """
 import argparse
 import collections

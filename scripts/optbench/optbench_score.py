@@ -9,7 +9,7 @@ would hit it), with a small pad. Ground truth per set:
 Combinations run their parts in parallel, so a combination's time per screen is the slowest part's time.
 Options per screen counts boxes after merging near-duplicates (IoU > 0.5).
 
-  python scripts/eval/optbench_score.py [--conf 0.05,0.1,0.2,0.3] [--json out.json]
+  python scripts/optbench/optbench_score.py [--conf 0.05,0.1,0.2,0.3] [--json out.json]
 """
 import argparse
 import json

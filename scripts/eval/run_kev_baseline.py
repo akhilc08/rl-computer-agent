@@ -4,7 +4,7 @@ Runs each example twice (original and reversed option order) to measure order
 sensitivity, and reports accuracy, calibration, selective accuracy and latency.
 
 Run inside Kev's environment:
-  .vendor/kev/.venv/bin/python scripts/baseline/run_kev_baseline.py --run jaredpalmer/kev-4b@v1.0 --name kev-4b-4bit
+  .vendor/kev/.venv/bin/python scripts/eval/run_kev_baseline.py --run jaredpalmer/kev-4b@v1.0 --name kev-4b-4bit
 """
 import argparse
 import json

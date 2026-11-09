@@ -10,7 +10,7 @@ records and counted, so element accuracy over all steps = record accuracy x reca
 
 State: website, the task, and the last 3 actions done (Mind2Web is multi-step; each step is one decision).
 
-  python scripts/data/convert_mind2web.py --root data/public/mind2web --out data/records   (GPU box)
+  python scripts/public/convert_mind2web.py --root data/public/mind2web --out data/records   (GPU box)
 """
 import argparse
 import glob

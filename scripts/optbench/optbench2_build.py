@@ -11,8 +11,8 @@ Sets (all publishable; nothing from the owner's accounts):
 Writes <out>/manifest.jsonl, <out>/images/..., and <out>/sources/ax.jsonl (sandbox only). Boxes are [x, y, w, h]
 in image pixels.
 
-  python scripts/eval/optbench2_build.py --sets groundcua,screen2ax --per_app 25 --out data/option_bench2
-  python scripts/eval/optbench2_build.py --sets sandbox --sandbox_runs <run dir> ... --out data/option_bench2
+  python scripts/optbench/optbench2_build.py --sets groundcua,screen2ax --per_app 25 --out data/option_bench2
+  python scripts/optbench/optbench2_build.py --sets sandbox --sandbox_runs <run dir> ... --out data/option_bench2
 """
 import argparse
 import io

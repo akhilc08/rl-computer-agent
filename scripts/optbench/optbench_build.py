@@ -9,7 +9,7 @@ Screens and ground truth, all boxes in image pixels:
 Mac-only sources written here: ax (explore only, recorded), ocr_fast, ocr_accurate (Apple Vision).
 Writes data/option_bench/manifest.jsonl and data/option_bench/sources/<source>.jsonl.
 
-  nice -n 10 .venv/bin/python scripts/eval/optbench_build.py --run data/explore/20261025-124135
+  nice -n 10 .venv/bin/python scripts/optbench/optbench_build.py --run data/explore/20261025-124135
 """
 import argparse
 import json

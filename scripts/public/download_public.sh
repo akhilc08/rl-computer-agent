@@ -3,7 +3,7 @@
 # Local (default): the screenshot-only sets, whose element lists come from Apple Vision OCR (macOS only).
 # --big: Multimodal-Mind2Web and AndroidControl, which carry their own HTML/accessibility trees; meant to
 # run on an AWS box next to training rather than on the laptop.
-#   scripts/data/download_public.sh [--big]
+#   scripts/public/download_public.sh [--big]
 set -e
 cd "$(dirname "$0")/../.."
 OUT=data/public

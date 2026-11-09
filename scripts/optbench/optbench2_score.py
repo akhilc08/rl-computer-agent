@@ -12,7 +12,7 @@ Merge rules for lists that mix structured (ax, ocr) and pixel (detector) sources
   fill     structured sources first; a detector box is added only if it overlaps no kept box (IoU <= 0.1), as UFO2 does
   gateK    pixel sources only on screens where AX has fewer than K elements (sandbox set, where AX exists)
 
-  python scripts/eval/optbench2_score.py --bench data/option_bench2 [--conf 0.05,0.15,0.3] [--json out.json]
+  python scripts/optbench/optbench2_score.py --bench data/option_bench2 [--conf 0.05,0.15,0.3] [--json out.json]
 """
 import argparse
 import json

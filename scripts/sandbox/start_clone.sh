@@ -14,7 +14,7 @@ VID=$($GUI /opt/homebrew/bin/displayplacer list | awk '/Persistent screen id/{id
 REAL=$($GUI /opt/homebrew/bin/displayplacer list | awk '/Persistent screen id/{id=$4} /24 inch/{print id}')
 $GUI /opt/homebrew/bin/displayplacer "id:$VID res:1440x900 scaling:on origin:(0,0) degree:0" "id:$REAL res:1024x768 origin:(1440,0) degree:0"
 rm -rf data/sandbox
-$GUI env RLCA_SANDBOX=1 zsh scripts/vm/seed_content.sh
+$GUI env RLCA_SANDBOX=1 zsh scripts/sandbox/seed_content.sh
 OUT=$PWD/data/sandbox/$(hostname -s)-$(date +%Y%m%d-%H%M%S)
 mkdir -p "$OUT"
 ($GUI env RLCA_SANDBOX=1 RLCA_VDISPLAY="$VID" nohup .venv/bin/python scripts/sandbox/collect.py --hours "$HOURS" --out "$OUT" > "$OUT/collect.log" 2>&1 &)

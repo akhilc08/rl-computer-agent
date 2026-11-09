@@ -1,7 +1,7 @@
 """Claude-drafted command labels for a subset of the sandbox screens (data/sandbox_ds).
 
-  .venv/bin/python scripts/data/sandbox_label.py prep --per-split train=100 test=100 --batch 25
-  .venv/bin/python scripts/data/sandbox_label.py check        # validate parts/*.jsonl, write commands.jsonl
+  .venv/bin/python scripts/sandbox/sandbox_label.py prep --per-split train=100 test=100 --batch 25
+  .venv/bin/python scripts/sandbox/sandbox_label.py check        # validate parts/*.jsonl, write commands.jsonl
 
 prep picks screens round-robin across each split's apps, alternating "hard" screens (AX-poor, or 3+
 detector-only icons) with ordinary ones, and writes for each one label/screens/<id>.txt (the option list
@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parents[2]
 DS = ROOT / "data/sandbox_ds"
 LAB = DS / "label"
-sys.path.insert(0, str(ROOT / "scripts/data"))
+sys.path.insert(0, str(ROOT / "scripts/labels"))
 from label_check import problems  # noqa: E402
 
 

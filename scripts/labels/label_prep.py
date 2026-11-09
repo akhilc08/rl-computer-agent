@@ -8,8 +8,8 @@ Screens where the page never loaded (claude.ai stuck on its spinner) are skipped
 Writes data/labels/screens.jsonl (one row per screen, with options) and data/labels/screens/<id>.txt
 (the same options as text, for whoever writes the commands).
 
-  .venv/bin/python scripts/data/label_prep.py --run data/explore/<stamp>
-  .venv/bin/python scripts/data/label_prep.py --native data/native/<stamp> [...]   (adds native-app screens)
+  .venv/bin/python scripts/labels/label_prep.py --run data/explore/<stamp>
+  .venv/bin/python scripts/labels/label_prep.py --native data/native/<stamp> [...]   (adds native-app screens)
 
 Native runs have no URL, so one screen per distinct window (its element signature), and screens whose
 (role, label) set is at least --near (Jaccard) like one already kept in the same app are dropped: the

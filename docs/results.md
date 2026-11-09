@@ -2,7 +2,7 @@
 
 ## Where Kev's options come from: AX vs OCR vs detector (2026-10-25)
 
-This is a replay of explorer run `data/explore/20261025-124135`: 712 unique Arc screenshots from 9 sites, run with `scripts/eval/replay_sources.py`. Raw output is in that run's `sources.jsonl` and `sources_summary.json` (see [data.md](data.md) for how to get the data). The Mac is an Apple Silicon laptop, and the detector and captioner run on MPS.
+This is a replay of explorer run `data/explore/20261025-124135`: 712 unique Arc screenshots from 9 sites, run with `scripts/optbench/replay_sources.py`. Raw output is in that run's `sources.jsonl` and `sources_summary.json` (see [data.md](data.md) for how to get the data). The Mac is an Apple Silicon laptop, and the detector and captioner run on MPS.
 
 Each screen's options come from three sources:
 - **Accessibility (AX):** the window's AX tree.
@@ -67,7 +67,7 @@ Gmail's AX p90 is 463 ms. Kev 0.8B (4-bit MLX) takes about 170 ms per step.
 
 ### By-eye check of the extras (2026-11-04)
 
-These are hand judgments on 27 screenshots, 3 per site. `scripts/eval/overlay_sample.py draw` draws the AX, OCR-only and detector-only boxes; each extra was then marked as a real click target or not, and `score` tallies the marks. Judgments are in `overlays/judgments.jsonl` in the run folder.
+These are hand judgments on 27 screenshots, 3 per site. `scripts/optbench/overlay_sample.py draw` draws the AX, OCR-only and detector-only boxes; each extra was then marked as a real click target or not, and `score` tallies the marks. Judgments are in `overlays/judgments.jsonl` in the run folder.
 
 | Site | AX | OCR extras | real | Detector extras | real |
 |---|---|---|---|---|---|
@@ -159,7 +159,7 @@ On the A10G: UI-Venus-1.5-2B about 0.86 s, ShowUI-2B about 0.82 s, Qwen3-VL-2B a
 
 ## Kev vs the open element-list models: MindAct and WebLINX (2026-11-06)
 
-Every model picks from the same element list for the same commands. The lists come from the page's HTML on Mind2Web and from our pixel parser on the screenshot sets; our Mac set and NeetCode use AX trees. Each set is the same fixed sample of 500 decisions (seed 0, `data/records_s`). The exceptions are all 429 Mac val screens, plus 519 website and 521 domain steps on Mind2Web. On Mind2Web, MindAct's own DeBERTa ranker keeps the top 50 elements, and every model picks from those 50. The target makes the top 50 for 90% of task, 87% of website and 87% of domain steps; MindAct's paper reports about 86%. Steps whose target isn't in the top 50 are left out for every model. Scripts: `scripts/data/convert_mind2web.py`, `scripts/eval/webagent_baselines.py`, `scripts/eval/score_kev.py`. Outputs: `runs/webagents`, `runs/kev-box`.
+Every model picks from the same element list for the same commands. The lists come from the page's HTML on Mind2Web and from our pixel parser on the screenshot sets; our Mac set and NeetCode use AX trees. Each set is the same fixed sample of 500 decisions (seed 0, `data/records_s`). The exceptions are all 429 Mac val screens, plus 519 website and 521 domain steps on Mind2Web. On Mind2Web, MindAct's own DeBERTa ranker keeps the top 50 elements, and every model picks from those 50. The target makes the top 50 for 90% of task, 87% of website and 87% of domain steps; MindAct's paper reports about 86%. Steps whose target isn't in the top 50 are left out for every model. Scripts: `scripts/public/convert_mind2web.py`, `scripts/eval/webagent_baselines.py`, `scripts/eval/score_kev.py`. Outputs: `runs/webagents`, `runs/kev-box`.
 
 ### Element accuracy (%)
 
@@ -209,7 +209,7 @@ Kev's serving path on the Mac (4-bit MLX) takes about 0.17 s for the model. The 
 
 ## Option sources: coverage vs speed (2026-11-06)
 
-Every option source scored on the same screens: 712 Arc screenshots from explorer run `20261025-124135` plus public screenshots (OmniACT 98 Mac screens, ScreenSpot-Pro 300, OSWorld-G 250). Scripts: `scripts/eval/optbench_build.py` (manifest, AX, Vision OCR), `optbench_detect.py` (pixel detectors), `optbench_score.py` (coverage). Outputs are in `data/option_bench/`.
+Every option source scored on the same screens: 712 Arc screenshots from explorer run `20261025-124135` plus public screenshots (OmniACT 98 Mac screens, ScreenSpot-Pro 300, OSWorld-G 250). Scripts: `scripts/optbench/optbench_build.py` (manifest, AX, Vision OCR), `optbench_detect.py` (pixel detectors), `optbench_score.py` (coverage). Outputs are in `data/option_bench/`.
 
 A target is covered when some option's center falls inside one of its correct boxes. That is, clicking the option would hit it. The ground truths:
 
@@ -296,8 +296,8 @@ Live AX needs a bit more:
 - **Permissions.** The Python or terminal process needs Accessibility and Screen Recording access. On an EC2 Mac these are granted once through a GUI session (VNC / Screen Sharing), or through an MDM profile.
 - **Apps.** They have to be installed, signed in where it matters, and open, with a real window on the virtual display.
 - **Scripts.**
-  - `scripts/eval/compare_sources.py` walks AX on the current window of each running app and times it.
-  - `scripts/data/explore_native.py` records full runs in the layout `optbench_build.py` reads (`states.jsonl` + `shots/`).
+  - `scripts/optbench/compare_sources.py` walks AX on the current window of each running app and times it.
+  - `scripts/collect/explore_native.py` records full runs in the layout `optbench_build.py` reads (`states.jsonl` + `shots/`).
 - **Timings.** EC2 Macs are M1 / M2 / M2 Pro / M4, not the owner's M5, so expect different numbers. Compare sources on the same machine, not against this table.
 
 
@@ -306,8 +306,8 @@ Live AX needs a bit more:
 Every model was run on every benchmark it can run. Kev's numbers on the older sets are from the sections above; its WebLINX and AndroidControl runs were added on 2026-11-07 (A10G median 92 ms on AndroidControl, 139 ms on WebLINX). Each set is the same fixed sample for every model (`data/records_s`, seed 0): 500 per set, 519/521 on the Mind2Web website/domain splits, and Mac val = 809 (the old 429 plus 380 Slack, Notes and Notion commands). Screenshot models see the screenshot and must click inside the target's box; every other model picks from the element list. Table: `python3 scripts/eval/results_table.py`; outputs in `runs/webagents`, `runs/list-baselines`, `runs/vlm`.
 
 New benchmarks:
-- **AndroidControl, low-level split** (`scripts/data/convert_androidcontrol.py`): direct step instructions with real accessibility trees, 1,288 test steps across 237 apps.
-- **WebLINX, all five test splits** (`scripts/data/convert_weblinx.py`): real pages with WebLINX's own released candidate ranking, top 50. The target is in the top 50 for 53–77% of turns, depending on the split, and turns where it isn't are left out for every model.
+- **AndroidControl, low-level split** (`scripts/public/convert_androidcontrol.py`): direct step instructions with real accessibility trees, 1,288 test steps across 237 apps.
+- **WebLINX, all five test splits** (`scripts/public/convert_weblinx.py`): real pages with WebLINX's own released candidate ranking, top 50. The target is in the top 50 for 53–77% of turns, depending on the split, and turns where it isn't are left out for every model.
 
 ### Element accuracy (%)
 
@@ -396,7 +396,7 @@ Kev was scored on the original 429 Mac val commands, and screenshot models only 
 ## Option sources v2: 3,158 screens, 153 apps (2026-11-07)
 
 Which detector and merge rule to use to build Kev's option list, scored against dense element boxes
-(`scripts/eval/optbench2_*.py`; detectors on an A10G, Apple Vision OCR on an EC2 Mac). Recall = share of
+(`scripts/optbench/optbench2_*.py`; detectors on an A10G, Apple Vision OCR on an EC2 Mac). Recall = share of
 clickable elements with an option center inside them. Options = list length after merging near-duplicates.
 
 - **GroundCUA** (2,131 screens, 87 desktop apps, people boxed every element). GPA-GUI-Detector was almost
@@ -439,7 +439,7 @@ clickable elements with an option center inside them. Options = list length afte
 ## Sandbox dataset (2026-11-08)
 
 Three EC2 Macs ran the collector for 20 h each (`scripts/sandbox/collect.py`): 33,290 screenshots. After
-`scripts/data/sandbox_dataset.py` (clean, split, sources, visible):
+`scripts/sandbox/sandbox_dataset.py` (clean, split, sources, visible):
 
 - **19,898 screens, 115 apps/sites** (40 websites); 13,258 near-duplicates and 134 blank frames dropped. Light and
   dark mode, four window sizes. 1,481 screens are AX-poor (< 8 labelled AX elements).
@@ -451,6 +451,6 @@ Three EC2 Macs ran the collector for 20 h each (`scripts/sandbox/collect.py`): 3
   separate windows, on ~2,800 screens. The AX tree still lists those controls, so AX targets stay valid, but
   each AX option now carries `visible` and screens with more than 30% hidden carry `capture_mismatch`. Worth
   checking whether Kev's runtime capture has the same gap on macOS 26.
-- **Commands (Claude drafts)** on 200 screens (100 train, 100 test, 103 apps), from `scripts/data/sandbox_label.py`:
+- **Commands (Claude drafts)** on 200 screens (100 train, 100 test, 103 apps), from `scripts/sandbox/sandbox_label.py`:
   2,674 commands and 893 icon captions; 20% of commands target a detector-only icon, 10% are absent. The test
   drafts still need a human pass.

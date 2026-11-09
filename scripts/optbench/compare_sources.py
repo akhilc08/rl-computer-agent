@@ -5,7 +5,7 @@ fast), OmniParser detector, and captions for detector boxes nothing else explain
 list tags each item with its sources. Writes, per app, the screenshot, an overlay (AX green,
 OCR blue, detector-only red) and a JSON record to data/source_eval/<stamp>/.
 
-  .venv/bin/python scripts/eval/compare_sources.py [--apps Arc Slack ...] [--no-caption]
+  .venv/bin/python scripts/optbench/compare_sources.py [--apps Arc Slack ...] [--no-caption]
 """
 import argparse
 import json

@@ -11,7 +11,7 @@ go on while the user works. Native apps need focus, so they (and sites that auto
 only once the user has been idle 5 minutes, and stop as soon as the mouse moves. Stops at --hours,
 when the screen locks, or when the mouse is pushed into the top-left corner.
 
-  .venv/bin/python scripts/data/explore.py --hours 7 [--targets gmail notion ...] [--arc_window ID] [--dry]
+  .venv/bin/python scripts/collect/explore.py --hours 7 [--targets gmail notion ...] [--arc_window ID] [--dry]
 """
 import argparse
 import hashlib

@@ -7,8 +7,8 @@ score: after "clickable" (numbers of the extras that are real targets) and "miss
        found) are filled in by hand, prints how many of the extras are real, per site and overall.
        A crowded screen can instead get "real_counts": {"ocr": n, "det": n} with "clickable": [].
 
-  .venv/bin/python scripts/eval/overlay_sample.py draw --run data/explore/<stamp> --per_site 3
-  .venv/bin/python scripts/eval/overlay_sample.py score --run data/explore/<stamp>
+  .venv/bin/python scripts/optbench/overlay_sample.py draw --run data/explore/<stamp> --per_site 3
+  .venv/bin/python scripts/optbench/overlay_sample.py score --run data/explore/<stamp>
 """
 import argparse
 import json

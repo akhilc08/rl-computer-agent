@@ -1,6 +1,6 @@
 """Check labelled commands against their screens and print the mix (styles, verbs, flags).
 
-  .venv/bin/python scripts/data/label_check.py [data/labels/commands.jsonl]
+  .venv/bin/python scripts/labels/label_check.py [data/labels/commands.jsonl]
 """
 import json
 import sys

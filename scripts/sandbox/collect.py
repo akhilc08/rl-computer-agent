@@ -1,4 +1,4 @@
-"""Collect screens on a throwaway sandbox Mac (EC2 Mac seeded by scripts/vm/seed_content.sh). Nothing on
+"""Collect screens on a throwaway sandbox Mac (EC2 Mac seeded by scripts/sandbox/seed_content.sh). Nothing on
 it is real, so unlike explore.py this launches apps, takes focus, opens menus and dialogs, types fake
 text, and presses irreversible controls (send, delete) so the dataset has real examples of them.
 
@@ -34,7 +34,7 @@ from ApplicationServices import AXUIElementCreateApplication, AXUIElementCreateS
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(ROOT / "scripts/data"))
+sys.path.insert(0, str(ROOT / "scripts/collect"))
 import explore as E  # noqa: E402
 from rlca import explore as X  # noqa: E402
 from rlca import ax as rlca_ax  # noqa: E402
@@ -384,7 +384,7 @@ def main():
         set_dark(c.dark)
         set_screen(c.size)
         if rnd and rnd % args.reseed_every == 0:
-            sh(f"RLCA_SANDBOX=1 {ROOT}/scripts/vm/seed_content.sh", timeout=600)
+            sh(f"RLCA_SANDBOX=1 {ROOT}/scripts/sandbox/seed_content.sh", timeout=600)
         jobs = [("app", a) for a in discover_apps()] + [("site", s) for s in SITES]
         if only:
             jobs = [(k, w) for k, w in jobs if (w if k == "app" else "web:" + E.domain(w)) in only]

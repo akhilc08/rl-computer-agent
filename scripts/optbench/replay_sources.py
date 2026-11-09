@@ -1,6 +1,6 @@
 """Replay an exploration run's saved screenshots through the pixel sources, one at a time, and time them.
 
-Run after scripts/data/explore.py has finished, with nothing else busy, so the timings are clean.
+Run after scripts/collect/explore.py has finished, with nothing else busy, so the timings are clean.
 For each unique screenshot: Vision OCR (accurate and fast), the OmniParser detector, the merge with
 that state's AX elements, and captions for the detector boxes nothing else explains (captions only
 on a --caption_sample of screenshots, since they cost seconds each). AX timings were recorded live.
@@ -8,7 +8,7 @@ on a --caption_sample of screenshots, since they cost seconds each). AX timings 
 Writes <run>/sources.jsonl (one row per screenshot) and <run>/sources_summary.json
 (p50/p90 latency and item counts per app, and per target).
 
-  .venv/bin/python scripts/eval/replay_sources.py --run data/explore/<stamp>
+  .venv/bin/python scripts/optbench/replay_sources.py --run data/explore/<stamp>
 """
 import argparse
 import json
