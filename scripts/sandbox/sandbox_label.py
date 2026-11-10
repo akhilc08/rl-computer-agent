@@ -26,9 +26,16 @@ sys.path.insert(0, str(ROOT / "scripts/labels"))
 from label_check import problems  # noqa: E402
 
 
-def load():
-    screens = {json.loads(l)["id"]: json.loads(l) for l in open(DS / "screens.jsonl")}
-    opts = {json.loads(l)["id"]: json.loads(l) for l in open(DS / "options.jsonl")}
+def load(only=None):
+    """Screens and option lists by id; `only` (a set of ids) skips parsing the rest (lines start {"id": "<12 hex>")."""
+    def rows(name):
+        out = {}
+        for l in open(DS / name):
+            if only is None or l[8:20] in only:
+                r = json.loads(l)
+                out[r["id"]] = r
+        return out
+    screens, opts = rows("screens.jsonl"), rows("options.jsonl")
     split = json.load(open(DS / "splits.json"))["apps"]
     return screens, opts, split
 
@@ -111,8 +118,8 @@ def prep(per_split, batch, seed=0):
 
 
 def check():
-    screens, opts, _ = load()
     chosen = json.load(open(LAB / "chosen.json"))
+    screens, opts, _ = load(set(chosen))
     rows, caps, bad, gone = [], [], 0, set()
     df = DS / "drop_screens.tsv"
     drop = {l.split("\t")[0] for l in open(df) if l.strip()} if df.exists() else set()
