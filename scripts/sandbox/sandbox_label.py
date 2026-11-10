@@ -67,6 +67,8 @@ def picture(s, o, path):
 def prep(per_split, batch, seed=0):
     screens, opts, split = load()
     rng = random.Random(seed)
+    df = DS / "drop_screens.tsv"
+    drop = {l.split("\t")[0] for l in open(df) if l.strip()} if df.exists() else set()
     taken = set()
     for f in DS.glob("label*/chosen.json"):
         taken |= set(json.load(open(f)))
@@ -74,7 +76,7 @@ def prep(per_split, batch, seed=0):
     for sp, n in per_split.items():
         by_app = collections.defaultdict(lambda: ([], []))
         for sid, s in screens.items():
-            if split[s["app"]] != sp or sid not in opts or not opts[sid]["options"] or sid in taken:
+            if split[s["app"]] != sp or sid not in opts or not opts[sid]["options"] or sid in taken or sid in drop:
                 continue
             hard = s["ax_poor"] or n_icons(opts[sid]) >= 3
             by_app[s["app"]][0 if hard else 1].append(sid)
@@ -112,6 +114,8 @@ def check():
     screens, opts, _ = load()
     chosen = json.load(open(LAB / "chosen.json"))
     rows, caps, bad, gone = [], [], 0, set()
+    df = DS / "drop_screens.tsv"
+    drop = {l.split("\t")[0] for l in open(df) if l.strip()} if df.exists() else set()
     for part in sorted((LAB / "parts").glob("*.jsonl")):
         for i, line in enumerate(open(part)):
             if not line.strip():
@@ -123,6 +127,9 @@ def check():
                 print(part.name, i, "bad json")
                 continue
             sid = r.get("screen")
+            if sid in drop:
+                gone.add(sid)
+                continue
             if sid in chosen and sid not in opts:      # screen replaced by a re-clean (a fixed-capture near-duplicate)
                 gone.add(sid)
                 continue
@@ -157,7 +164,7 @@ def check():
     with open(LAB / "captions.jsonl", "w") as f:
         f.writelines(json.dumps(r) + "\n" for r in caps)
     if gone:
-        print(f"skipped {len(gone)} labelled screens no longer in the dataset")
+        print(f"skipped {len(gone)} labelled screens no longer in the dataset or on the drop list")
     n = max(len(rows), 1)
     icon = sum(any(t[0] == "d" for t in r["targets"]) for r in rows)
     print(f"{len(rows)} commands on {len({r['screen'] for r in rows})} screens, {len(caps)} icon captions, {bad} rejected")

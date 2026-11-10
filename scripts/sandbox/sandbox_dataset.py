@@ -79,8 +79,15 @@ def load_runs():
         yield run, byshot.values()
 
 
+def dropped():
+    """Screen ids removed by hand (data/sandbox_ds/drop_screens.tsv: id <tab> reason), e.g. adult pages the explorer wandered into."""
+    f = OUT / "drop_screens.tsv"
+    return {l.split("\t")[0] for l in open(f) if l.strip()} if f.exists() else set()
+
+
 def clean():
     OUT.mkdir(parents=True, exist_ok=True)
+    drop = dropped()
     stats = collections.Counter()
     kept = collections.defaultdict(list)                  # (app, mode, size) -> [(hash, axset)]
     rows = []
@@ -113,6 +120,9 @@ def clean():
             kept[(app, mode, size)].append((h, axset))
             labelled = [e for e in s["elements"] if e["label"]]
             sid = hashlib.sha1(f"{rel}/{s['shot']}".encode()).hexdigest()[:12]
+            if sid in drop:
+                stats["dropped_by_hand"] += 1
+                continue
             rows.append({
                 "id": sid, "app": app, "kind": "web" if app.startswith("web:") else "native",
                 "title": s.get("title"), "url": s.get("url"), "mode": mode, "size": size,
