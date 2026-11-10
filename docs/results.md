@@ -454,3 +454,15 @@ Three EC2 Macs ran the collector for 20 h each (`scripts/sandbox/collect.py`): 3
 - **Commands (Claude drafts)** on 200 screens (100 train, 100 test, 103 apps), from `scripts/sandbox/sandbox_label.py`:
   2,674 commands and 893 icon captions; 20% of commands target a detector-only icon, 10% are absent. The test
   drafts still need a human pass.
+
+**Re-collection with the fixed capture (2026-11-10).** The collector now screenshots everything on screen in the
+window's rect (`rlca.screen.COMPOSITE`). One more EC2 Mac ran 20 h on the 23 test apps and 18 AX-poor apps, plus
+2 h on Font Book after a fix for AX frames at infinity. Merged with the old runs (new screens win near-duplicates;
+each screen has `capture: composite | window`):
+
+- **25,117 screens**, still 115 apps, same frozen split: train 15,481, val 2,110, test 7,526. AX-poor screens: 2,240.
+- **5,426 composite screens**: 4.4% of AX options hidden and 174 (3%) mismatched, against 37.8% and 51% for the
+  old window captures. Most test-split screens are now composite.
+- **Pixel-work subset** (`pixel_eval.jsonl`): 14,853 screens, up from 9,784.
+- 221 old screens were replaced by near-identical composite ones, including 13 of the 200 labelled screens.
+- MuseScore 4 hung on every visit and has no composite screens.
