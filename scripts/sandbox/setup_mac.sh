@@ -29,6 +29,7 @@ sudo pmset -a sleep 0 displaysleep 0 disksleep 0
 defaults -currentHost write com.apple.screensaver idleTime 0
 defaults write com.apple.screensaver askForPassword 0 || true
 
+eval "$(/opt/homebrew/bin/brew shellenv)"   # a plain ssh command doesn't load the login PATH
 export HOMEBREW_NO_AUTO_UPDATE=1
 brew install python@3.12 >/dev/null
 PY=$(brew --prefix python@3.12)/bin/python3.12
