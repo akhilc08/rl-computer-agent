@@ -2,6 +2,7 @@
 
   .venv/bin/python scripts/sandbox/sandbox_label.py prep --per-split train=100 test=100 --batch 25
   .venv/bin/python scripts/sandbox/sandbox_label.py check        # validate parts/*.jsonl, write commands.jsonl
+  --dir label_train2  works in data/sandbox_ds/label_train2 instead; prep skips screens any label*/ dir already chose.
 
 prep picks screens round-robin across each split's apps, alternating "hard" screens (AX-poor, or 3+
 detector-only icons) with ordinary ones, and writes for each one label/screens/<id>.txt (the option list
@@ -65,11 +66,14 @@ def picture(s, o, path):
 def prep(per_split, batch, seed=0):
     screens, opts, split = load()
     rng = random.Random(seed)
+    taken = set()
+    for f in DS.glob("label*/chosen.json"):
+        taken |= set(json.load(open(f)))
     chosen = []
     for sp, n in per_split.items():
         by_app = collections.defaultdict(lambda: ([], []))
         for sid, s in screens.items():
-            if split[s["app"]] != sp or sid not in opts or not opts[sid]["options"]:
+            if split[s["app"]] != sp or sid not in opts or not opts[sid]["options"] or sid in taken:
                 continue
             hard = s["ax_poor"] or n_icons(opts[sid]) >= 3
             by_app[s["app"]][0 if hard else 1].append(sid)
@@ -106,7 +110,7 @@ def prep(per_split, batch, seed=0):
 def check():
     screens, opts, _ = load()
     chosen = json.load(open(LAB / "chosen.json"))
-    rows, caps, bad = [], [], 0
+    rows, caps, bad, gone = [], [], 0, set()
     for part in sorted((LAB / "parts").glob("*.jsonl")):
         for i, line in enumerate(open(part)):
             if not line.strip():
@@ -118,6 +122,9 @@ def check():
                 print(part.name, i, "bad json")
                 continue
             sid = r.get("screen")
+            if sid in chosen and sid not in opts:      # screen replaced by a re-clean (a fixed-capture near-duplicate)
+                gone.add(sid)
+                continue
             if sid not in chosen:
                 bad += 1
                 print(part.name, i, "unknown screen", sid)
@@ -138,6 +145,9 @@ def check():
                 bad += 1
                 print(part.name, i, r.get("command"), "|", "; ".join(p))
                 continue
+            # Boxes and labels too, so commands survive a changed option list (new detector, new ids).
+            by_id = {x["id"]: x for x in opts[sid]["options"]} | {t["id"]: t for t in screens[sid]["targets"] if t["source"] == "ax_menubar"}
+            r["target_boxes"] = [{"id": t, "box": by_id[t]["box"], "label": by_id[t]["label"], "role": by_id[t]["role"]} for t in r["targets"]]
             rows.append({**r, "split": chosen[sid], "labeler": "claude-draft"})
     for k, r in enumerate(rows):
         r["id"] = f"{r['screen']}-c{k}"
@@ -145,6 +155,8 @@ def check():
         f.writelines(json.dumps(r) + "\n" for r in rows)
     with open(LAB / "captions.jsonl", "w") as f:
         f.writelines(json.dumps(r) + "\n" for r in caps)
+    if gone:
+        print(f"skipped {len(gone)} labelled screens no longer in the dataset")
     n = max(len(rows), 1)
     icon = sum(any(t[0] == "d" for t in r["targets"]) for r in rows)
     print(f"{len(rows)} commands on {len({r['screen'] for r in rows})} screens, {len(caps)} icon captions, {bad} rejected")
@@ -158,7 +170,9 @@ if __name__ == "__main__":
     ap.add_argument("step", choices=["prep", "check"])
     ap.add_argument("--per-split", nargs="*", default=["train=100", "test=100"])
     ap.add_argument("--batch", type=int, default=25)
+    ap.add_argument("--dir", default="label", help="folder under data/sandbox_ds for this labelling round")
     a = ap.parse_args()
+    LAB = DS / a.dir
     if a.step == "prep":
         prep({k: int(v) for k, v in (x.split("=") for x in a.per_split)}, a.batch)
     else:
