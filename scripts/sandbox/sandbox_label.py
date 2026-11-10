@@ -43,7 +43,8 @@ def option_text(s, o):
     for x in o["options"]:
         ctx = f"  in: {' > '.join(x['context'])}" if x.get("context") else ""
         lab = f' "{x["label"]}"' if x["label"] else " (no label: look at the image)"
-        lines.append(f"{x['id']}  {x['role'].removeprefix('AX').lower() or 'item'}{lab}{ctx}  box={x['box']}")
+        hid = "  [not in image: a real control the screenshot missed; target it by its label]" if x.get("visible") is False else ""
+        lines.append(f"{x['id']}  {x['role'].removeprefix('AX').lower() or 'item'}{lab}{ctx}  box={x['box']}{hid}")
     menubar = [t for t in s["targets"] if t["source"] == "ax_menubar" and t.get("enabled", True)]
     if menubar:
         lines += ["", "menu bar:"] + [f"{t['id']}  {t['role'].removeprefix('AX').lower()} \"{t['label']}\"" for t in menubar]
