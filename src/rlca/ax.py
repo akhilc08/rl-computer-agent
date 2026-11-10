@@ -4,6 +4,7 @@ Stage 1-2 of the candidate pipeline: walk the frontmost window and the menu bar,
 keep elements a user could act on, and describe each with its role, label,
 section context and state.
 """
+import math
 from dataclasses import asdict
 
 from ApplicationServices import (
@@ -75,7 +76,10 @@ def frame_of(el):
         return None
     _, p = AXValueGetValue(pos, kAXValueCGPointType, None)
     _, s = AXValueGetValue(size, kAXValueCGSizeType, None)
-    return (round(p.x), round(p.y), round(s.width), round(s.height))
+    v = (p.x, p.y, s.width, s.height)
+    if not all(math.isfinite(x) for x in v):     # seen in Font Book: an element at infinity
+        return None
+    return tuple(round(x) for x in v)
 
 
 MIN_SIDE = 4    # Chromium shrinks scrolled-out web nodes to slivers

@@ -54,8 +54,14 @@ def condition(s, modes):
     return (m.group(1), m.group(2)) if m else ("light", f"{s['frame'][2]}x{s['frame'][3]}")
 
 
+def composite(run):
+    """Runs from the fixed collector (screenshot = everything on screen in the window's rect) are named recollect-*."""
+    return run.name.startswith("recollect-")
+
+
 def load_runs():
-    for states in sorted(RAW.glob("*/*/states.jsonl")):
+    # Composite runs first, so when an old one-window capture and a new one are near-duplicates the new one is kept.
+    for states in sorted(RAW.glob("*/*/states.jsonl"), key=lambda p: (not composite(p.parent), str(p))):
         run = states.parent
         modes, det = {}, collections.defaultdict(list)
         if (run / "transitions.jsonl").exists():
@@ -112,7 +118,7 @@ def clean():
                 "title": s.get("title"), "url": s.get("url"), "mode": mode, "size": size,
                 "shot": str(path.relative_to(ROOT)), "img_size": list(img.size), "scale": s.get("scale"),
                 "frame": s["frame"], "ax_poor": len(labelled) < AX_POOR, "n_ax": len(s["elements"]),
-                "ms": s.get("ms"),
+                "ms": s.get("ms"), "capture": "composite" if composite(run) else "window",
                 "targets": [{"id": e["id"], "source": "ax", "role": e["role"], "label": e["label"],
                              "context": e.get("context", []), "enabled": e.get("enabled", True), "box": e["frame"]}
                             for e in s["elements"]] +
@@ -183,7 +189,13 @@ def sources():
 
     rows = [json.loads(l) for l in open(OUT / "screens.jsonl")]
     path = OUT / "options.jsonl"
-    done = {json.loads(l)["id"] for l in open(path)} if path.exists() else set()
+    ids = {r["id"] for r in rows}
+    old = [l for l in open(path)] if path.exists() else []
+    keep = [l for l in old if json.loads(l)["id"] in ids]        # a re-clean can drop screens; forget their options
+    if len(keep) < len(old):
+        path.write_text("".join(keep))
+        print(f"dropped options of {len(old) - len(keep)} screens no longer in screens.jsonl")
+    done = {json.loads(l)["id"] for l in keep}
     gpa = YOLO(str(GPA_COREML), task="detect")
     t_start = time.time()
     with open(path, "a") as out:
