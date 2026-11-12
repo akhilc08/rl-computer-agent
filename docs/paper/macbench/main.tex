@@ -1,0 +1,123 @@
+% MacBench: WWW 2027 Resource track submission (4 pages incl. references, single-blind).
+% Build: cd docs/paper/macbench && latexmk -pdf main.tex
+% Anything in \tbd{} is not measured or decided yet. Do not submit with any \tbd left.
+\documentclass[sigconf,screen,review]{acmart}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\newcommand{\tbd}[1]{\textcolor{red}{\textbf{TBD}: #1}}
+\newcommand{\bench}{MacBench}
+
+\setcopyright{none}
+\acmConference[WWW '27]{The ACM Web Conference 2027}{May 10--14, 2027}{Dublin, Ireland}
+\settopmatter{printacmref=false}
+
+\begin{document}
+
+\title{\bench{}: Grounding Commands on macOS Apps and the Web,\\with Accessibility and Pixel Tracks}
+
+% Check name and affiliation.
+\author{Saiakhil Chilaka}
+\affiliation{\institution{Cornell University}\city{Ithaca}\state{NY}\country{USA}}
+\email{sc3484@cornell.edu}
+
+\begin{abstract}
+GUI grounding benchmarks score a model on one step: given a screenshot and a command, find the element to act on. Existing sets are dominated by mobile, web and Windows screens, give only pixels, and assume the target is always on screen. We release \bench{}, a grounding benchmark of 1,045 macOS screens (564 from 15 native apps, 481 from 8 websites in Safari) with 14,369 natural-language commands. Each screen ships with its screenshot, the full accessibility (AX) tree of the window and menu bar, reference OCR, and reference detector boxes, so the same commands can be scored in a \emph{pixels-only} track and an \emph{AX + pixels} track. Commands are labelled with the acceptable targets, the action, and three properties earlier sets lack: whether the target is absent from the screen (1,525 commands), whether the command is ambiguous (617), and whether the action is irreversible (99). All screens were captured on throwaway cloud Macs seeded with made-up content and browsed logged out, and none of the 23 apps or sites appears in our training split. We describe the collection pipeline, the privacy process, and baselines, including a 0.8B option-picking model that answers \tbd{X}\% of AX-track commands correctly. Data, scoring code and documentation: \tbd{URL}.
+\end{abstract}
+
+\keywords{GUI grounding, computer-use agents, accessibility, macOS, benchmark}
+\maketitle
+
+\section{Introduction}
+A computer-use agent has to turn a command such as ``hit the little plus at the top'' into one element on the screen. Benchmarks for this step, from ScreenSpot~\cite{seeclick} and ScreenSpot-v2~\cite{osatlas} to ScreenSpot-Pro~\cite{sspro}, OSWorld-G~\cite{jedi} and OmniACT~\cite{omniact}, have driven fast progress. They share three limits that matter for a desktop assistant.
+
+\emph{Platform.} macOS is a small slice of them. Of a 500-command sample of ScreenSpot-v2, 55 are macOS screens; ScreenSpot-Pro's macOS screens are professional tools; OSWorld-G is Ubuntu.
+
+\emph{Input.} They provide pixels only. On a real Mac an assistant can also read the accessibility (AX) tree, which names most controls exactly, but misses others entirely (unlabelled icons, canvas apps, custom-drawn toolbars). Whether AX helps, and where pixels must fill the gaps, can only be measured if both are available for the same commands.
+
+\emph{Abstention.} Every command has a target. A deployed agent also gets commands it should not act on: the target is not on screen, the command fits two elements equally well, or the action cannot be undone.
+
+\bench{} addresses all three for macOS. Its contributions are: (1)~1,045 macOS screens from 23 held-out apps and sites with screenshots, AX trees, OCR and detector output; (2)~14,369 commands with acceptable target sets, actions, and absent, ambiguous and irreversible labels; (3)~two tracks and a scoring protocol for both point-answering screenshot models and list-picking models; (4)~a collection and privacy pipeline on disposable cloud Macs that others can reuse; and (5)~baselines.
+
+\section{Related Work}
+Grounding benchmarks pair a screenshot with an instruction and a target box: ScreenSpot~\cite{seeclick} (mobile, desktop, web), its corrected v2~\cite{osatlas}, ScreenSpot-Pro~\cite{sspro} (high-resolution professional software), OSWorld-G~\cite{jedi} (Ubuntu) and OmniACT~\cite{omniact} (desktop and web scripts). Web agent benchmarks such as Mind2Web~\cite{mind2web} and WebArena~\cite{webarena} expose the DOM, the web analogue of the AX tree, but cover the browser only. Interactive suites such as OSWorld~\cite{osworld} and macOSWorld~\cite{macosworld} score whole tasks; \bench{} isolates the grounding step at larger scale and adds abstention labels. Screen parsers such as OmniParser~\cite{omniparser} build option lists from pixels; \bench{}'s pixels track lets such parsers be compared against the AX tree on the same commands.
+
+\section{Collection}
+\textbf{Sandbox capture.} We ran a collector for about 20 hours on each of four EC2 Mac instances (macOS, 1440$\times$900 virtual HiDPI display). Before collection each Mac was seeded with made-up content: contacts, notes, reminders, calendar events and mail for invented people, all with \texttt{@example.com} addresses and 555 phone numbers. Websites were browsed logged out. The collector opened apps and sites, clicked through their controls, and at each step saved the frontmost window composited with any sheets, popovers and the menu bar, the AX tree of the window and menu bar, and window geometry. Each instance was terminated after collection. The full pool has 25,117 screens from 115 apps and sites (40 websites).
+
+\textbf{App-level split.} Apps and sites were split before labelling, stratified by native vs.\ web and by how complete their AX tree is: 80 train, 12 validation, 23 test. \bench{} uses only the 23 test apps (Table~\ref{tab:stats}), so a model trained on the other splits has never seen any of its apps.
+
+\textbf{Screen selection.} From 7,526 test-app screens we picked 1,045, spread evenly over apps, alternating hard screens (AX-poor or with 3+ icons only a detector finds) with ordinary ones and light with dark mode, and dropping near-duplicates (option-label Jaccard $\geq 0.9$ within an app).
+
+\textbf{Option lists.} For each screen we merge three sources into a reference list: AX elements (role, label, context), Apple Vision OCR lines not covered by an AX element, and boxes from a YOLO GUI detector not covered by either. Detector-only boxes are the icons a pixels-only system must find without text.
+
+\textbf{Commands.} Commands were drafted by LLM labelling agents (Claude) that saw the screenshot, with detector-only boxes drawn and numbered, and the option list. Per screen they wrote about 12 commands in two styles, casual (``hit the trash can'') and planner-like (``Open the Sections dropdown''), following a written guide: target only visible elements, refer to icons by look or position, write 2--4 icon commands where a screen has icons, keep 10--15\% absent commands, and add ambiguous and irreversible commands where the screen allows. Each command lists every acceptable target. \tbd{human verification: how many commands were checked, by whom, agreement rate, how many were corrected or removed.}
+
+\begin{table}[t]
+\caption{\bench{} at a glance.}
+\label{tab:stats}
+\small
+\begin{tabular}{@{}lr@{}}
+\toprule
+Screens (native / web) & 1,045 (564 / 481) \\
+Apps and sites & 23 (15 native, 8 web) \\
+Commands & 14,369 \\
+\quad target is an AX element & 10,113 \\
+\quad target is OCR text with no AX element & 961 \\
+\quad target is a detector-only icon & 1,709 \\
+\quad target is a menu-bar item & 61 \\
+\quad target absent (``none'') & 1,525 \\
+\quad ambiguous / irreversible & 617 / 99 \\
+\bottomrule
+\end{tabular}
+
+\vspace{2pt}
+\footnotesize Native apps: Audio MIDI Setup, Blender, Disk Utility, Font Book, GnuCash, Godot, IINA, Journal, Keka, Krita, MuseScore~4, Music, Notes, Photo Booth, Weather. Sites: bbc.com, irs.gov, khanacademy.org, npr.org, reddit.com, wikipedia.org, ycombinator.com, youtube.com.
+\end{table}
+
+\section{Benchmark}
+\textbf{Tracks.} \emph{Pixels only}: the system gets the screenshot and the command; it may use the reference OCR and detector output but not AX (14,308 commands; menu-bar targets are excluded since a closed menu has no pixels). \emph{AX + pixels}: the system also gets the AX tree (all 14,369 commands).
+
+\textbf{Answers.} A system answers with a point, an option id, or ``none''. A point is correct if it falls inside any target box; an option id is correct if it is in the target set. For list-picking models we ship ready-made option lists for both tracks. On the pixels track, 1,548 targets are covered by no OCR line or detector box, so a list model cannot get them right; we score list models over all track commands and count these as errors, so list and point models share one denominator.
+
+\textbf{Metrics.} Element accuracy, overall and by target kind (AX, OCR, icon, menu); abstention accuracy on absent commands and the false-abstain rate on present ones; accuracy on ambiguous and irreversible commands; and, for systems with confidences, calibration (ECE and error rate above 0.9 confidence).
+
+\section{Baselines}
+We score list-picking models on the ready-made lists. \emph{Kev-0.8B}~\cite{kev} is a public 0.8B model that scores each option of a list. \emph{Kev-0.8B-FT} is the same model fine-tuned on 66,497 commands from our 80 training apps, built the same way as \bench{} but with icons from a deployed pipeline (detector, a SigLIP~\cite{siglip} reranker keeping the top 50 icons per command, and a Florence-2~\cite{florence2} captioner trained on AX labels). \tbd{Jev 1.14 (hosted), a screenshot model such as Venus-2B on the point protocol, and a frontier model if budget allows.} Icon items in the ready-made lists carry the labelling agents' captions, which are better than a deployed captioner's; Table~\ref{tab:results} uses them.
+
+\begin{table}[t]
+\caption{Element accuracy (\%) on \bench{}. All: every command in the track; columns by target kind.}
+\label{tab:results}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}llrrrrr@{}}
+\toprule
+Track & Model & All & AX & OCR & Icon & None \\
+\midrule
+AX + pixels & Kev-0.8B & \tbd{} & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
+            & Kev-0.8B-FT & \tbd{} & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
+\midrule
+Pixels only & Kev-0.8B & \tbd{} & -- & \tbd{} & \tbd{} & \tbd{} \\
+            & Kev-0.8B-FT & \tbd{} & -- & \tbd{} & \tbd{} & \tbd{} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\tbd{Results paragraph: AX vs.\ pixels gap per target kind; icon accuracy; abstention; ambiguous and irreversible commands (the fine-tuned model never predicted ambiguous on validation).}
+
+\section{Availability and Maintenance}
+\bench{} is available at \tbd{URL (Hugging Face dataset)} with a datasheet~\cite{datasheets}, a scoring script, and the collection, selection, privacy-scan and build scripts. Labels and code are released under CC BY-NC 4.0 (data) and MIT (code) \tbd{confirm}; screenshots show Apple's interface and third-party websites, whose rights stay with their owners, and are provided for research use as in prior grounding sets. Releases are versioned; corrections reported through the repository's issue tracker go into point releases with a changelog, and test labels are never retrained on in our own work.
+
+\section{Ethics}
+\textbf{Provenance.} All screens come from disposable cloud Macs with made-up personal data; no personal computer or account was used. Websites were visited logged out, without posting or purchasing.
+
+\textbf{Privacy.} Public websites still show real people (news subjects, Wikipedia editors, forum users), and the machines leaked identifiers into some screens. We scanned every string and screenshot for emails, phone numbers, IP addresses, cloud host names, UUIDs, serial numbers, person names and faces (442 of 1,045 screens had at least one hit, most of them public figures' names or OCR noise), removed screens with private information (profile pages showing emails, a system dialog naming the collection machine, block notices showing IP ranges), and \tbd{blurred Safari tab strips and title bars, which exposed the sandbox's browsing history, and Disk Utility volume UUIDs}. Faces and names of public figures on news pages remain, as in other web screenshot sets.
+
+\textbf{Content.} Screens from an adult forum section the crawler reached were removed.
+
+\textbf{Automated labels.} Commands and icon captions were drafted by an LLM. \tbd{verification numbers}. Commands may reflect the labelling model's phrasing more than real users'; we release the labelling guide so this can be judged.
+
+\textbf{Misuse.} Better grounding helps both assistive agents and automation that acts without a user's consent. The benchmark contains no credentials, payment flows or personal data, and its irreversible-action labels are meant to help agents ask before acting.
+
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{refs}
+\end{document}
