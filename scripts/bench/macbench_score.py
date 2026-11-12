@@ -1,6 +1,8 @@
 """Score predictions on MacBench, for list-picking models (option ids) or screenshot models (points).
 
-Every command in the track counts. A command with no prediction counts as wrong, so a list model is charged for
+Option ids are checked against the target set of the ready-made list for the track (list_ax.jsonl /
+list_pixels.jsonl): the pixels list has its own ids (t* OCR lines, i* detector boxes) and its targets are the items
+covering the target boxes. Every command in the track counts. A command with no prediction counts as wrong, so a list model is charged for
 targets its list does not contain (1,548 pixels-track commands) and point and list models share one denominator.
 
 Predictions, one JSON object per line, keyed by command id:
@@ -37,12 +39,22 @@ def answer(p, cmd):
     return k, probs[k]
 
 
-def correct(ans, cmd):
+def correct(ans, cmd, list_targets):
     if ans is None:
         return False
     if cmd["absent"]:
         return ans == "none"
-    return ans == "hit" or ans in cmd["targets"]
+    return ans == "hit" or ans in list_targets.get(cmd["id"], cmd["targets"])
+
+
+def load_list_targets(path):
+    """command id -> acceptable option ids in a ready-made list."""
+    out = {}
+    if path.exists():
+        for r in map(json.loads, open(path)):
+            q = r["questions"]["element"]
+            out[r["_meta"]["id"]] = set(q.get("target") or [q["label"]])
+    return out
 
 
 def pct(a, b):
@@ -55,9 +67,15 @@ def main():
     ap.add_argument("--track", choices=["ax", "pixels"], required=True)
     ap.add_argument("--pred", required=True)
     ap.add_argument("--json")
+    ap.add_argument("--ids_from", help="score only the commands that have a prediction in this file (to compare two "
+                    "systems on the subset one of them covered); not for leaderboard numbers")
     args = ap.parse_args()
     cmds = [c for c in map(json.loads, open(Path(args.bench) / "commands.jsonl")) if args.track in c["tracks"]]
     preds = {p["id"]: p for p in map(json.loads, open(args.pred))}
+    list_targets = load_list_targets(Path(args.bench) / f"list_{args.track}.jsonl")
+    if args.ids_from:
+        keep = {json.loads(l)["id"] for l in open(args.ids_from)}
+        cmds = [c for c in cmds if c["id"] in keep]
     tally = {k: [0, 0] for k in ("all", *KINDS, "ambiguous", "irreversible")}
     false_abstain = [0, 0]
     confident = [0, 0]                       # answers at >= 0.9 confidence: wrong, total
@@ -66,7 +84,7 @@ def main():
         p = preds.get(c["id"])
         covered += p is not None
         ans, conf = answer(p, c)
-        ok = correct(ans, c)
+        ok = correct(ans, c, list_targets)
         for k in ("all", c["target_kind"]) + (("ambiguous",) if c["ambiguous"] else ()) + (("irreversible",) if c["irreversible"] else ()):
             tally[k][0] += ok
             tally[k][1] += 1

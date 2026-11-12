@@ -44,14 +44,35 @@ def label_dirs():
     return sorted(p for p in DS.glob("label*") if (p / "commands.jsonl").exists())
 
 
-def pixel_options(o, caps):
+def parse_caption(text):
+    """The deployed captioner answers "<role>: <label>"; anything else is a plain label on an icon
+    (same rule as scripts/train/pixel_lists.py, which built Kev's training lists)."""
+    role, sep, label = (text or "").partition(":")
+    if sep and role.strip() and len(role.split()) <= 3 and not any(ch.isdigit() for ch in role):
+        return role.strip().lower(), label.strip()
+    return "icon", (text or "").strip()
+
+
+def pixel_options(o, dep):
     """The pixels-only reference list, from the raw OCR lines and detector boxes (never AX's roles or labels).
-    Detector boxes keep a caption only where the labelling pass captioned that box (detector-only icons)."""
-    cap_by_box = {tuple(x["box"]): caps[x["id"]] for x in o["options"] if x["id"] in caps}
+    Every detector box is named by the deployed captioner (dep: one caption per o["gpa"] box)."""
     items = [{"id": f"t{i}", "role": "text", "label": l["text"], "box": l["box"]} for i, l in enumerate(o["ocr"])]
-    items += [{"id": f"i{j}", "role": "icon", "label": cap_by_box.get(tuple(b["box"]), ""), "box": b["box"]}
-              for j, b in enumerate(o["gpa"])]
+    for j, b in enumerate(o["gpa"]):
+        role, label = parse_caption(dep[j] if j < len(dep) else "")
+        items.append({"id": f"i{j}", "role": role, "label": label, "box": b["box"]})
     return items
+
+
+def deployed_options(options, o, dep):
+    """The AX + pixels reference list with each detector-only item (d*) named by the deployed captioner."""
+    by_box = {tuple(b["box"]): dep[j] for j, b in enumerate(o["gpa"]) if j < len(dep)}
+    out = []
+    for x in options:
+        if x["id"].startswith("d"):
+            role, label = parse_caption(by_box.get(tuple(x["box"]), ""))
+            x = {**x, "role": role, "label": label}
+        out.append(x)
+    return out
 
 
 def main():
@@ -59,6 +80,8 @@ def main():
     ap.add_argument("--out", default=str(ROOT / "data/macbench/v0"))
     ap.add_argument("--split", default="test", help="which app split to build from (test; val for a dev set)")
     ap.add_argument("--no_images", action="store_true")
+    ap.add_argument("--captions", default=None, help="captions_deployed.jsonl from macbench_captions.py "
+                    "(default <out>/captions_deployed.jsonl); the ready-made lists need it")
     args = ap.parse_args()
     from rlca.candidates import MAX_OPTIONS
     from rlca.records import record
@@ -77,6 +100,10 @@ def main():
 
     out = Path(args.out)
     (out / "images").mkdir(parents=True, exist_ok=True)
+    cap_path = Path(args.captions) if args.captions else out / "captions_deployed.jsonl"
+    deployed = {r["screen"]: r["captions"] for r in map(json.loads, open(cap_path))} if cap_path.exists() else None
+    if deployed is None:
+        print(f"no {cap_path}: building screens/commands only, no ready-made lists", flush=True)
     stats = Counter()
     used = sorted({c["screen"] for c in cmds})
     red = {}
@@ -92,8 +119,6 @@ def main():
             options = []
             for x in o["options"]:
                 x = dict(x)
-                if x["id"].startswith("d") and (sid, x["id"]) in captions:
-                    x["caption"] = captions[(sid, x["id"])]
                 x["box_px"] = to_px(x["box"], frame, scale)
                 options.append(x)
             ax = [dict(t, box_px=to_px(t.get("box"), frame, scale)) for t in targets]
@@ -113,6 +138,11 @@ def main():
             stats["screens"] += 1
             stats[f"screens_{s['kind']}"] += 1
 
+    with open(out / "annotations_icon_captions.jsonl", "w") as f:      # labelling-pass captions: annotations, not inputs
+        for (sid, oid), text in sorted(captions.items()):
+            if sid in red:
+                f.write(json.dumps({"screen": sid, "option": oid, "caption": scrub(text, screens[sid]["app"])},
+                                   ensure_ascii=False) + "\n")
     menubar = {sid: {t["id"]: t for t in red[sid]["targets"] if t["source"] == "ax_menubar"} for sid in used}
     lists = {"ax": open(out / "list_ax.jsonl", "w"), "pixels": open(out / "list_pixels.jsonl", "w")}
     with open(out / "commands.jsonl", "w") as f:
@@ -148,10 +178,11 @@ def main():
                 stats[f"track_{t}"] += 1
             meta = {"source": "macbench", "id": c["id"], "screen": c["screen"]}
             # Reference lists for list-picking models: AX + OCR + detector (+ menu bar), and OCR + detector only.
-            ax_opts = [{**x, "label": x["label"] or captions.get((c["screen"], x["id"]), "")} for x in by_id.values()]
-            ax_opts += list(menubar[c["screen"]].values())
-            caps = {i: t for (sid, i), t in captions.items() if sid == c["screen"]}
-            pix_opts = pixel_options(r, caps)
+            if deployed is None:
+                continue
+            dep = deployed[c["screen"]]
+            ax_opts = deployed_options(list(by_id.values()), r, dep) + list(menubar[c["screen"]].values())
+            pix_opts = pixel_options(r, dep)
             for t, options in (("ax", ax_opts), ("pixels", pix_opts)):
                 if t not in tracks:
                     continue
