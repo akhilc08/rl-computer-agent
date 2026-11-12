@@ -91,7 +91,8 @@ def build(args):
     sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts/public"), str(ROOT / "scripts/train")]
     from convert_public import match
     from pixel_lists import parse_caption
-    from rlca.records import MAX_OPTIONS, record
+    from rlca.candidates import MAX_OPTIONS
+    from rlca.records import record
     from build_records import PUBLIC_ACTIONS
     out_full, out_s = ROOT / "data/records_pixpub", ROOT / "data/records_pixpub_s"
     out_full.mkdir(parents=True, exist_ok=True)
