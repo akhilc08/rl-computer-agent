@@ -39,7 +39,7 @@ All screens come from throwaway EC2 Mac sandboxes seeded with made-up content (f
   - `tracks`: which tracks the command counts in.
   - `verified`: false until a human checks it.
 - `list_ax.jsonl`, `list_pixels.jsonl`: ready-made decision requests (state plus choice questions, Kev/Jev format) for list-picking models on the two tracks.
-  - Detector-only icons in these lists carry the captions the labelling pass wrote, which are better than what a deployed captioner produces. Systems should be scored with their own captions too, and the paper must say which.
+  - Every detector box in these lists is named by a deployed captioner (Florence-2 trained on AX labels, `captions_deployed.jsonl`). The labelling pass's own icon captions are in `annotations_icon_captions.jsonl`. They echo the commands (98% of icon targets share a word with their command), so they are annotations, never inputs.
 
 Boxes are `[x, y, w, h]` in screen points. Image pixels are `((x - frame_x) * scale, (y - frame_y) * scale, w * scale, h * scale)`; each box also carries `box_px`.
 

@@ -37,7 +37,8 @@ def main():
         shutil.rmtree(out)
     (out / "tools").mkdir(parents=True)
     shutil.copytree(bench / "images", out / "images")
-    for f in ("screens.jsonl", "commands.jsonl", "list_ax.jsonl", "list_pixels.jsonl", "stats.json"):
+    for f in ("screens.jsonl", "commands.jsonl", "list_ax.jsonl", "list_pixels.jsonl", "stats.json",
+              "captions_deployed.jsonl", "annotations_icon_captions.jsonl"):
         shutil.copyfile(bench / f, out / f)
     shutil.copyfile(HERE / "macbench_score.py", out / "tools/score.py")
     shutil.copyfile(ROOT / "scripts/labels/label_guide.txt", out / "tools/label_guide.txt")

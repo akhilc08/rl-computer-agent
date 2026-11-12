@@ -74,6 +74,8 @@ A grounding benchmark for macOS. Each item gives a screenshot and a command, suc
   - `absent`, `ambiguous`, `irreversible`;
   - `tracks`, `verified`.
 - `list_ax.jsonl`, `list_pixels.jsonl`: ready-made option lists for list-picking models. Each item is a state plus choice questions.
+- `captions_deployed.jsonl`: the deployed captioner's name for every detector box, used in the lists.
+- `annotations_icon_captions.jsonl`: the labelling pass's icon captions. These are annotations only, not inputs.
 - `tools/score.py`: the scorer.
 - `tools/label_guide.txt`: the labelling guide.
 
@@ -107,7 +109,7 @@ Report:
 - accuracy on ambiguous and irreversible commands;
 - calibration, if your system gives a confidence.
 
-Icon items in the ready-made lists carry the labelling pass's captions. Say whether you used them or your own.
+Icon items in the ready-made lists are named by a deployed captioner (`captions_deployed.jsonl`), not by the labelling pass. The labelling pass's icon captions are in `annotations_icon_captions.jsonl`; they echo the commands, so never feed them to a system. If you use your own captioner, say so.
 
 ## Privacy
 
