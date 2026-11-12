@@ -16,7 +16,9 @@ Writes runs/vlm/<model>/<set>/rows.jsonl and summary.json. GPU box only (not the
           `pip install -e GUI-Actor --no-deps`; its pointer-head code does not run on transformers>=4.52)
           tinyclick (Florence-2 remote code: same venv as gui-actor, plus timm and einops)
   sets: the five public sets (default) and our Mac labels: mac_val (records val.jsonl) and neetcode
-        (heldout_site.jsonl), built from the records + screens.jsonl + explorer states (see mac_examples)
+        (heldout_site.jsonl), built from the records + screens.jsonl + explorer states (see mac_examples);
+        macbench: MacBench v1's pixels track (data/macbench/v1, see macbench_examples). Absent-target commands are
+        kept: a refusal counts as the right answer there, any point as wrong.
 """
 import argparse
 import importlib.util
@@ -325,6 +327,19 @@ def mac_examples(set_name, records_dir):
     return exs, dict(skipped)
 
 
+def macbench_examples(bench="data/macbench/v1"):
+    """MacBench pixels-track commands as examples; gt_boxes are the targets' boxes in image pixels."""
+    exs = []
+    for c in map(json.loads, open(ROOT / bench / "commands.jsonl")):
+        if "pixels" not in c["tracks"]:
+            continue
+        boxes = [b["box_px"] for b in c["target_boxes"] if b.get("box_px")]
+        exs.append({"id": c["id"], "shot": f"{bench}/images/{c['screen']}.jpg", "instruction": c["command"],
+                    "gt_box": boxes[0] if boxes else None, "gt_boxes": boxes, "absent": c["absent"],
+                    "platform": c["app"], "screen": c["screen"]})
+    return exs
+
+
 def gt_box(ex, size):
     if ex.get("gt_box"):
         return ex["gt_box"]
@@ -358,7 +373,7 @@ def summarize(rows, n_no_box, meta):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True, choices=MODELS)
-    ap.add_argument("--sets", nargs="+", default=SETS, choices=SETS + list(MAC_SETS))
+    ap.add_argument("--sets", nargs="+", default=SETS, choices=SETS + list(MAC_SETS) + ["macbench"])
     ap.add_argument("--limit", type=int, default=0, help="first N examples per set")
     ap.add_argument("--ids_from", help="keep only examples whose id is in this records dir (e.g. data/records_s, the fixed "
                     "500-example samples every model is scored on)")
@@ -381,7 +396,10 @@ def main():
     data_root, ran = ROOT / args.data_root, 0
     for set_name in args.sets:
         mac_skipped = None
-        if set_name in MAC_SETS:
+        if set_name == "macbench":
+            exs = macbench_examples()[: args.limit or None]
+            print(f"macbench: {len(exs)} examples", flush=True)
+        elif set_name in MAC_SETS:
             exs, mac_skipped = mac_examples(set_name, args.ids_from or "data/records_s")
             exs = exs[: args.limit or None]
             print(f"{set_name}: {len(exs)} examples, skipped {mac_skipped}", flush=True)
@@ -392,7 +410,7 @@ def main():
                 continue
             exs = [json.loads(line) for line in open(src)]
             exs = [e for e in exs if not args.splits or e.get("split") in args.splits][: args.limit or None]
-        if args.ids_from and set_name not in MAC_SETS:
+        if args.ids_from and set_name not in MAC_SETS and set_name != "macbench":
             rec = ROOT / args.ids_from / f"{RECORDS[set_name]}.jsonl"
             ids = {json.loads(line)["_meta"]["id"] for line in open(rec)}
             exs = [e for e in exs if e["id"] in ids or e["id"].removeprefix(f"{set_name}-") in ids]   # weblinx ids carry the set prefix
@@ -403,7 +421,7 @@ def main():
         n_no_box = 0
         with open(rows_path, "a") as f:
             for i, ex in enumerate(exs):
-                if not ex.get("gt_box") and not ex.get("gt_norm"):
+                if not ex.get("gt_box") and not ex.get("gt_norm") and not ex.get("absent"):
                     n_no_box += 1                    # OmniAct point-only answers: nothing to hit
                     continue
                 if ex["id"] in done:
@@ -427,7 +445,8 @@ def main():
                 conf = p.pop("_conf")() if "_conf" in p else p.get("conf")
                 pt = p["point"]
                 row = {"id": ex["id"], "platform": ex.get("platform"), "point": [round(v, 1) for v in pt] if pt else None,
-                       "hit": bool(pt and any(inside(b, pt) for b in ex.get("gt_boxes") or [box])), "latency_ms": round(ms, 1), "warmup": ran < WARMUP,
+                       "hit": (pt is None) if ex.get("absent") else bool(pt and any(inside(b, pt) for b in ex.get("gt_boxes") or [box])),
+                       "absent": bool(ex.get("absent")), "latency_ms": round(ms, 1), "warmup": ran < WARMUP,
                        "conf": conf, "status": p["status"], "raw": p["raw"], "gt_box": box, "size": list(size),
                        **{k: p[k] for k in ("topk", "topk_values", "action") if k in p},
                        **({"gt_boxes": ex["gt_boxes"], "screen": ex["screen"]} if "gt_boxes" in ex else {})}
