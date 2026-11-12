@@ -155,6 +155,25 @@ def main():
     stats["apps"] = len({screens[s]["app"] for s in used})
     json.dump(dict(sorted(stats.items())), open(out / "stats.json", "w"), indent=1)
     print(json.dumps(dict(sorted(stats.items())), indent=1))
+    write_readme(out, args.split, stats, [screens[s] for s in used],
+                 sum(apps.get(s["app"]) == args.split for s in screens.values()))
+
+
+def write_readme(out, split, stats, used, pool):
+    """README from scripts/bench/macbench_README.md, with every count filled in from this build."""
+    names = lambda kind: sorted({s["app"].removeprefix("web:") for s in used if s["kind"] == kind}, key=str.lower)
+    native, web = names("native"), names("web")
+    join = lambda xs: ", ".join(xs[:-1]) + (" and " if len(xs) > 1 else "") + xs[-1] if xs else "none"
+    small = [k for k in ("ambiguous", "irreversible") if stats[k] < 50]
+    fields = {k: 0 for k in ("kind_ax", "kind_ocr", "kind_icon", "kind_menu", "kind_none", "ambiguous", "irreversible",
+                             "track_ax", "track_pixels", "list_ax_target_missing", "list_pixels_target_missing",
+                             "screens_native", "screens_web")}
+    fields.update(stats)
+    fields.update(version=out.name, split=split, pool=pool, n_native_apps=len(native), n_web_apps=len(web),
+                  native_apps=", ".join(native), web_apps=join(web),
+                  small_note=f"- {join(small).capitalize()} counts are too small in {out.name} to report separately." if small else "- Report ambiguous and irreversible accuracy separately.")
+    tpl = (Path(__file__).parent / "macbench_README.md").read_text()
+    (out / "README.md").write_text(tpl.format(**fields))
 
 
 def inside_same(a, b):
