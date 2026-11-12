@@ -29,6 +29,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 DS = ROOT / "data/sandbox_ds"
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from macbench_redact import blur_image, history_label, redact, scrub  # noqa: E402
 
 
 def to_px(box, frame, scale):
@@ -77,9 +79,15 @@ def main():
     (out / "images").mkdir(parents=True, exist_ok=True)
     stats = Counter()
     used = sorted({c["screen"] for c in cmds})
+    red = {}
     with open(out / "screens.jsonl", "w") as f:
         for sid in used:
-            s, o = screens[sid], opts[sid]
+            s = screens[sid]
+            targets, r_opts, r_ocr, r_gpa, blur, dropped = redact(s, opts[sid])
+            o = red[sid] = {"options": r_opts, "ocr": r_ocr, "gpa": r_gpa, "targets": targets, "dropped": dropped,
+                            "hidden": {t["id"] for t in targets if history_label(s, t)}}
+            stats["redacted_boxes"] += len(blur)
+            stats["screens_redacted"] += bool(blur)
             frame, scale = s["frame"], s["scale"]
             options = []
             for x in o["options"]:
@@ -88,9 +96,9 @@ def main():
                     x["caption"] = captions[(sid, x["id"])]
                 x["box_px"] = to_px(x["box"], frame, scale)
                 options.append(x)
-            ax = [dict(t, box_px=to_px(t.get("box"), frame, scale)) for t in s["targets"]]
-            row = {"id": sid, "app": s["app"], "kind": s["kind"], "split": args.split, "title": s["title"],
-                   "url": s["url"] if s["kind"] == "web" else None, "mode": s["mode"], "screen_size": s["size"],
+            ax = [dict(t, box_px=to_px(t.get("box"), frame, scale)) for t in targets]
+            row = {"id": sid, "app": s["app"], "kind": s["kind"], "split": args.split, "title": scrub(s["title"], s["app"]),
+                   "url": scrub(s["url"], s["app"]) if s["kind"] == "web" else None, "mode": s["mode"], "screen_size": s["size"],
                    "frame": frame, "scale": scale, "img_size": s["img_size"], "capture": s["capture"],
                    "ax_poor": s["ax_poor"], "image": f"images/{sid}.jpg", "ax": ax,
                    "ocr": [dict(l, box_px=to_px(l["box"], frame, scale)) for l in o["ocr"]],
@@ -98,17 +106,27 @@ def main():
                    "options": options}
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
             if not args.no_images:
-                shutil.copyfile(ROOT / s["shot"], out / "images" / f"{sid}.jpg")
+                if blur:
+                    blur_image(ROOT / s["shot"], out / "images" / f"{sid}.jpg", blur, frame, scale)
+                else:
+                    shutil.copyfile(ROOT / s["shot"], out / "images" / f"{sid}.jpg")
             stats["screens"] += 1
             stats[f"screens_{s['kind']}"] += 1
 
-    menubar = {sid: {t["id"]: t for t in screens[sid]["targets"] if t["source"] == "ax_menubar"} for sid in used}
+    menubar = {sid: {t["id"]: t for t in red[sid]["targets"] if t["source"] == "ax_menubar"} for sid in used}
     lists = {"ax": open(out / "list_ax.jsonl", "w"), "pixels": open(out / "list_pixels.jsonl", "w")}
     with open(out / "commands.jsonl", "w") as f:
         for c in cmds:
             s = screens[c["screen"]]
+            r = red[c["screen"]]
+            hidden_opts = r["dropped"] | {f"a{i}" for i, t in enumerate(r["targets"]) if t["id"] in r["hidden"]}
+            if set(c["targets"]) & hidden_opts:       # never expected: no command targets a redacted element
+                stats["dropped_redacted_target"] += 1
+                continue
+            c = dict(c, command=scrub(c["command"], s["app"]), text=scrub(c["text"], s["app"]),
+                     target_boxes=[dict(tb, label=scrub(tb.get("label"), s["app"])) for tb in c["target_boxes"]])
             frame, scale = s["frame"], s["scale"]
-            by_id = {x["id"]: x for x in opts[c["screen"]]["options"]}
+            by_id = {x["id"]: x for x in r["options"]}
             boxes = [dict(tb, box_px=to_px(tb.get("box"), frame, scale)) for tb in c["target_boxes"]]
             kinds = {t[0] for t in c["targets"]}
             # Pixels track: needs a box to click. Menu items (closed menus, no box) can't be reached from pixels alone.
@@ -133,11 +151,11 @@ def main():
             ax_opts = [{**x, "label": x["label"] or captions.get((c["screen"], x["id"]), "")} for x in by_id.values()]
             ax_opts += list(menubar[c["screen"]].values())
             caps = {i: t for (sid, i), t in captions.items() if sid == c["screen"]}
-            pix_opts = pixel_options(opts[c["screen"]], caps)
+            pix_opts = pixel_options(r, caps)
             for t, options in (("ax", ax_opts), ("pixels", pix_opts)):
                 if t not in tracks:
                     continue
-                options = options[:MAX_OPTIONS]
+                options = options[:MAX_OPTIONS - 1]   # record() adds "none"
                 ids = {x["id"] for x in options}
                 targets = [i for i in c["targets"] if i in ids]
                 if t == "pixels":      # an AX-only target counts if a pixel item covers the same spot
