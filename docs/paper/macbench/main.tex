@@ -38,6 +38,13 @@ A computer-use agent has to turn a command such as ``hit the little plus at the 
 
 \bench{} addresses all three for macOS. Its contributions are: (1)~1,045 macOS screens from 23 held-out apps and sites with screenshots, AX trees, OCR and detector output; (2)~14,369 commands with acceptable target sets, actions, and absent, ambiguous and irreversible labels; (3)~two tracks and a scoring protocol for both point-answering screenshot models and list-picking models; (4)~a collection and privacy pipeline on disposable cloud Macs that others can reuse; and (5)~baselines.
 
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig_godot.jpg}
+\caption{A \bench{} screen (Godot's project manager, whose AX tree exposes 10 elements). Reference options: AX (blue), OCR text with no AX element (orange), detector-only boxes (red). Three of its 13 commands, targets in green: (1)~``make a new project'' (icon), (2)~``hit the magnifying glass in the filter box'' (icon), (3)~``open settings'' (OCR). ``run the space shooter project'' is absent: no such project exists.}
+\label{fig:example}
+\end{figure}
+
 \section{Related Work}
 Grounding benchmarks pair a screenshot with an instruction and a target box: ScreenSpot~\cite{seeclick} (mobile, desktop, web), its corrected v2~\cite{osatlas}, ScreenSpot-Pro~\cite{sspro} (high-resolution professional software), OSWorld-G~\cite{jedi} (Ubuntu) and OmniACT~\cite{omniact} (desktop and web scripts). Web agent benchmarks such as Mind2Web~\cite{mind2web} and WebArena~\cite{webarena} expose the DOM, the web analogue of the AX tree, but cover the browser only. Interactive suites such as OSWorld~\cite{osworld} and macOSWorld~\cite{macosworld} score whole tasks; \bench{} isolates the grounding step at larger scale and adds abstention labels. Screen parsers such as OmniParser~\cite{omniparser} build option lists from pixels; \bench{}'s pixels track lets such parsers be compared against the AX tree on the same commands.
 
@@ -48,7 +55,7 @@ Grounding benchmarks pair a screenshot with an instruction and a target box: Scr
 
 \textbf{Screen selection.} From 7,526 test-app screens we picked 1,045, spread evenly over apps, alternating hard screens (AX-poor or with 3+ icons only a detector finds) with ordinary ones and light with dark mode, and dropping near-duplicates (option-label Jaccard $\geq 0.9$ within an app).
 
-\textbf{Option lists.} For each screen we merge three sources into a reference list: AX elements (role, label, context), Apple Vision OCR lines not covered by an AX element, and boxes from a YOLO GUI detector not covered by either. Detector-only boxes are the icons a pixels-only system must find without text.
+\textbf{Option lists.} Figure~\ref{fig:example} shows an example. For each screen we merge three sources into a reference list: AX elements (role, label, context), Apple Vision OCR lines not covered by an AX element, and boxes from a YOLO GUI detector not covered by either. Detector-only boxes are the icons a pixels-only system must find without text.
 
 \textbf{Commands.} Commands were drafted by LLM labelling agents (Claude) that saw the screenshot, with detector-only boxes drawn and numbered, and the option list. Per screen they wrote about 12 commands in two styles, casual (``hit the trash can'') and planner-like (``Open the Sections dropdown''), following a written guide: target only visible elements, refer to icons by look or position, write 2--4 icon commands where a screen has icons, keep 10--15\% absent commands, and add ambiguous and irreversible commands where the screen allows. Each command lists every acceptable target. \tbd{human verification: how many commands were checked, by whom, agreement rate, how many were corrected or removed.}
 
@@ -82,7 +89,7 @@ Commands & 14,369 \\
 \textbf{Metrics.} Element accuracy, overall and by target kind (AX, OCR, icon, menu); abstention accuracy on absent commands and the false-abstain rate on present ones; accuracy on ambiguous and irreversible commands; and, for systems with confidences, calibration (ECE and error rate above 0.9 confidence).
 
 \section{Baselines}
-We score list-picking models on the ready-made lists. \emph{Kev-0.8B}~\cite{kev} is a public 0.8B model that scores each option of a list. \emph{Kev-0.8B-FT} is the same model fine-tuned on 66,497 commands from our 80 training apps, built the same way as \bench{} but with icons from a deployed pipeline (detector, a SigLIP~\cite{siglip} reranker keeping the top 50 icons per command, and a Florence-2~\cite{florence2} captioner trained on AX labels). \tbd{Jev 1.14 (hosted), a screenshot model such as Venus-2B on the point protocol, and a frontier model if budget allows.} Icon items in the ready-made lists carry the labelling agents' captions, which are better than a deployed captioner's; Table~\ref{tab:results} uses them.
+We score list-picking models on the ready-made lists. \emph{Kev-0.8B}~\cite{kev} is a public calibrated decision model built on Qwen3.5-0.8B that returns a probability for each option of a list. \emph{Kev-0.8B-FT} is the same model fine-tuned on 66,497 commands from our 80 training apps, built the same way as \bench{} but with icons from a deployed pipeline (detector, a SigLIP~\cite{siglip} reranker keeping the top 50 icons per command, and a Florence-2~\cite{florence2} captioner trained on AX labels). \tbd{Jev 1.14 (hosted), a screenshot model such as Venus-2B on the point protocol, and a frontier model if budget allows.} Icon items in the ready-made lists carry the labelling agents' captions, which are better than a deployed captioner's; Table~\ref{tab:results} uses them.
 
 \begin{table}[t]
 \caption{Element accuracy (\%) on \bench{}. All: every command in the track; columns by target kind.}
@@ -110,7 +117,7 @@ Pixels only & Kev-0.8B & \tbd{} & -- & \tbd{} & \tbd{} & \tbd{} \\
 \section{Ethics}
 \textbf{Provenance.} All screens come from disposable cloud Macs with made-up personal data; no personal computer or account was used. Websites were visited logged out, without posting or purchasing.
 
-\textbf{Privacy.} Public websites still show real people (news subjects, Wikipedia editors, forum users), and the machines leaked identifiers into some screens. We scanned every string and screenshot for emails, phone numbers, IP addresses, cloud host names, UUIDs, serial numbers, person names and faces (442 of 1,045 screens had at least one hit, most of them public figures' names or OCR noise), removed screens with private information (profile pages showing emails, a system dialog naming the collection machine, block notices showing IP ranges), and \tbd{blurred Safari tab strips and title bars, which exposed the sandbox's browsing history, and Disk Utility volume UUIDs}. Faces and names of public figures on news pages remain, as in other web screenshot sets.
+\textbf{Privacy.} Public websites still show real people (news subjects, Wikipedia editors, forum users), and the machines leaked identifiers into some screens. We scanned every string and screenshot for emails, phone numbers, IP addresses, cloud host names, UUIDs, serial numbers, person names and faces (442 of 1,045 screens had at least one hit, most of them public figures' names or OCR noise), removed screens with private information (profile pages showing emails, a system dialog naming the collection machine, block notices showing IP ranges), and redacted the rest: Safari tab, sidebar and suggestion entries that pointed at a private person or place (street addresses from real-estate listings, user profiles, handles, searches for a person's name), volume and snapshot UUIDs, cloud host names, the sandbox account name and public IP addresses. Redacted text is replaced in every field and its box is blurred in the screenshot (437 boxes on 202 screens); no command targets a redacted element. Public figures in news content, public business phone numbers and public usernames remain, as on the live sites and in other web screenshot sets.
 
 \textbf{Content.} Screens from an adult forum section the crawler reached were removed.
 
