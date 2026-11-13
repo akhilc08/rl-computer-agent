@@ -3,7 +3,7 @@
 Copies the screenshots, screens.jsonl, commands.jsonl, the two ready-made lists, the scoring script and the
 labelling guide; writes README.md (the dataset card, from macbench_card.md with this build's counts), DATASHEET.md
 and LICENSE. Leaves out the internal privacy/ and review/ folders. Refuses to run while the build has open privacy
-flags of a blocking type or (unless --allow_unverified) unverified commands.
+flags of a blocking type or (unless --allow_unverified) before the sampled human check is recorded.
 
   .venv/bin/python scripts/bench/macbench_release.py --bench data/macbench/v1 --out data/macbench/release/v1
 """
@@ -30,14 +30,20 @@ def main():
     if open_flags:
         raise SystemExit(f"privacy flags still open: {open_flags}; rebuild with redaction and rescan")
     cmds = [json.loads(l) for l in open(bench / "commands.jsonl")]
+    vpath = bench / "review/verdicts.jsonl"           # the human check is a stratified sample, not every command
+    verdicts = {v["id"]: v["verdict"] for v in map(json.loads, open(vpath))} if vpath.exists() else {}
+    if not verdicts and not args.allow_unverified:
+        raise SystemExit("no human check yet (review/verdicts.jsonl); run the review and macbench_review_merge.py --apply")
+    for c in cmds:
+        c["verified"] = verdicts.get(c["id"]) == "correct"
     verified = sum(c["verified"] for c in cmds)
-    if verified < len(cmds) and not args.allow_unverified:
-        raise SystemExit(f"{len(cmds) - verified} of {len(cmds)} commands unverified; run the human check first")
     if out.exists():
         shutil.rmtree(out)
     (out / "tools").mkdir(parents=True)
     shutil.copytree(bench / "images", out / "images")
-    for f in ("screens.jsonl", "commands.jsonl", "list_ax.jsonl", "list_pixels.jsonl", "stats.json",
+    with open(out / "commands.jsonl", "w") as f:
+        f.writelines(json.dumps(c) + "\n" for c in cmds)
+    for f in ("screens.jsonl", "list_ax.jsonl", "list_pixels.jsonl", "stats.json",
               "captions_deployed.jsonl", "annotations_icon_captions.jsonl"):
         shutil.copyfile(bench / f, out / f)
     shutil.copyfile(HERE / "macbench_score.py", out / "tools/score.py")

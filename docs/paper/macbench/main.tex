@@ -57,7 +57,7 @@ Grounding benchmarks pair a screenshot with an instruction and a target box: Scr
 
 \textbf{Option lists.} Figure~\ref{fig:example} shows an example. Detector boxes in the shipped lists are named by a deployed captioner (\S5). For each screen we merge three sources into a reference list: AX elements (role, label, context), Apple Vision OCR lines not covered by an AX element, and boxes from a YOLO GUI detector not covered by either. Detector-only boxes are the icons a pixels-only system must find without text.
 
-\textbf{Commands.} Commands were drafted by LLM labelling agents (Claude) that saw the screenshot, with detector-only boxes drawn and numbered, and the option list. Per screen they wrote about 12 commands in two styles, casual (``hit the trash can'') and planner-like (``Open the Sections dropdown''), following a written guide: target only visible elements, refer to icons by look or position, write 2--4 icon commands where a screen has icons, keep 10--15\% absent commands, and add ambiguous and irreversible commands where the screen allows. Each command lists every acceptable target. \tbd{human verification: how many commands were checked, by whom, agreement rate, how many were corrected or removed.}
+\textbf{Commands.} Commands were drafted by LLM labelling agents (Claude) that saw the screenshot, with detector-only boxes drawn and numbered, and the option list. Per screen they wrote about 12 commands in two styles, casual (``hit the trash can'') and planner-like (``Open the Sections dropdown''), following a written guide: target only visible elements, refer to icons by look or position, write 2--4 icon commands where a screen has icons, keep 10--15\% absent commands, and add ambiguous and irreversible commands where the screen allows. Each command lists every acceptable target. The author checked a stratified sample of 300 commands (60 per target kind: AX, OCR, icon, menu bar, absent) against the screenshot with the target drawn; all 300 were judged correct (95\% Wilson interval 98.7--100\%).
 
 \begin{table}[t]
 \caption{\bench{} at a glance.}
@@ -121,7 +121,7 @@ Pixels only & Kev-0.8B & \tbd{} & -- & \tbd{} & \tbd{} & \tbd{} \\
 
 \textbf{Content.} Screens from an adult forum section the crawler reached were removed.
 
-\textbf{Automated labels.} Commands and icon captions were drafted by an LLM. \tbd{verification numbers}. Commands may reflect the labelling model's phrasing more than real users'; we release the labelling guide so this can be judged.
+\textbf{Automated labels.} Commands and icon captions were drafted by an LLM. A 300-command stratified sample was checked by hand and judged fully correct, but a single annotator's sample does not rule out rarer errors. Commands may reflect the labelling model's phrasing more than real users'; we release the labelling guide so this can be judged.
 
 \textbf{Misuse.} Better grounding helps both assistive agents and automation that acts without a user's consent. The benchmark contains no credentials, payment flows or personal data, and its irreversible-action labels are meant to help agents ask before acting.
 
