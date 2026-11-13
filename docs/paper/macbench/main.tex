@@ -21,7 +21,7 @@
 \email{sc3484@cornell.edu}
 
 \begin{abstract}
-GUI grounding benchmarks score a model on one step: given a screenshot and a command, find the element to act on. Existing sets are dominated by mobile, web and Windows screens, give only pixels, and assume the target is always on screen. We release \bench{}, a grounding benchmark of 1,045 macOS screens (564 from 15 native apps, 481 from 8 websites in Safari) with 14,369 natural-language commands. Each screen ships with its screenshot, the full accessibility (AX) tree of the window and menu bar, reference OCR, and reference detector boxes, so the same commands can be scored in a \emph{pixels-only} track and an \emph{AX + pixels} track. Commands are labelled with the acceptable targets, the action, and three properties earlier sets lack: whether the target is absent from the screen (1,525 commands), whether the command is ambiguous (617), and whether the action is irreversible (99). All screens were captured on throwaway cloud Macs seeded with made-up content and browsed logged out, and none of the 23 apps or sites appears in our training split. We describe the collection pipeline, the privacy process, and baselines, including a 0.8B option-picking model that answers \tbd{X}\% of AX-track commands correctly. Data, scoring code and documentation: \tbd{URL}.
+GUI grounding benchmarks score a model on one step: given a screenshot and a command, find the element to act on. Existing sets are dominated by mobile, web and Windows screens, give only pixels, and assume the target is always on screen. We release \bench{}, a grounding benchmark of 1,045 macOS screens (564 from 15 native apps, 481 from 8 websites in Safari) with 14,369 natural-language commands. Each screen ships with its screenshot, the full accessibility (AX) tree of the window and menu bar, reference OCR, and reference detector boxes, so the same commands can be scored in a \emph{pixels-only} track and an \emph{AX + pixels} track. Commands are labelled with the acceptable targets, the action, and three properties earlier sets lack: whether the target is absent from the screen (1,525 commands), whether the command is ambiguous (617), and whether the action is irreversible (99). All screens were captured on throwaway cloud Macs seeded with made-up content and browsed logged out, and none of the 23 apps or sites appears in our training split. We describe the collection pipeline, the privacy process, and baselines, including a 0.8B option-picking model that answers 82.5\% of AX-track commands correctly. Data, scoring code and documentation: \tbd{URL}.
 \end{abstract}
 
 \keywords{GUI grounding, computer-use agents, accessibility, macOS, benchmark}
@@ -89,10 +89,10 @@ Commands & 14,369 \\
 \textbf{Metrics.} Element accuracy, overall and by target kind (AX, OCR, icon, menu); abstention accuracy on absent commands and the false-abstain rate on present ones; accuracy on ambiguous and irreversible commands; and, for systems with confidences, calibration (ECE and error rate above 0.9 confidence).
 
 \section{Baselines}
-We score list-picking models on the ready-made lists. \emph{Kev-0.8B}~\cite{kev} is a public calibrated decision model built on Qwen3.5-0.8B that returns a probability for each option of a list. \emph{Kev-0.8B-FT} is the same model fine-tuned on 66,497 commands from our 80 training apps, built the same way as \bench{} but with icons from a deployed pipeline (detector, a SigLIP~\cite{siglip} reranker keeping the top 50 icons per command, and a Florence-2~\cite{florence2} captioner trained on AX labels). \emph{UI-Venus-1.5-2B}, a screenshot grounding model, answers with points on the pixels track. \tbd{Jev 1.14 (hosted list model) pending API credit.} In the ready-made lists every detector box is named by the deployed captioner, not by the labelling agents: their icon captions echo the commands (98\% of icon targets share a content word with their command, against 31\% with the deployed captions) and would leak the answer. We release them as annotations only.
+We score list-picking models on the ready-made lists. \emph{Kev-0.8B}~\cite{kev} is a public calibrated decision model built on Qwen3.5-0.8B that returns a probability for each option of a list. \emph{Kev-0.8B-FT} is the same model fine-tuned on 66,497 commands from our 80 training apps, built the same way as \bench{} but with icons from a deployed pipeline (detector, a SigLIP~\cite{siglip} reranker keeping the top 50 icons per command, and a Florence-2~\cite{florence2} captioner trained on AX labels). \emph{UI-Venus-1.5-2B}, a screenshot grounding model, answers with points on the pixels track. In the ready-made lists every detector box is named by the deployed captioner, not by the labelling agents: their icon captions echo the commands (98\% of icon targets share a content word with their command, against 31\% with the deployed captions) and would leak the answer. We release them as annotations only.
 
 \begin{table}[t]
-\caption{Element accuracy (\%) on \bench{}. All: every command in the track; columns by target kind.}
+\caption{Element accuracy (\%) on \bench{}. All: every command in the track; columns by target kind (None: absent commands, where only abstaining is right). On the pixels track, list models are charged for the 1,548 targets (15\% of AX-kind targets) that no OCR line or detector box covers.}
 \label{tab:results}
 \small
 \setlength{\tabcolsep}{4pt}
@@ -100,17 +100,17 @@ We score list-picking models on the ready-made lists. \emph{Kev-0.8B}~\cite{kev}
 \toprule
 Track & Model & All & AX & OCR & Icon & None \\
 \midrule
-AX + pixels & Kev-0.8B & \tbd{} & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
-            & Kev-0.8B-FT & \tbd{} & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
+AX + pixels & Kev-0.8B & 56.6 & 63.2 & 73.3 & 18.3 & 44.9 \\
+            & Kev-0.8B-FT & 82.5 & 87.7 & 77.6 & 49.9 & 87.7 \\
 \midrule
-Pixels only & Kev-0.8B & \tbd{} & -- & \tbd{} & \tbd{} & \tbd{} \\
-            & Kev-0.8B-FT & \tbd{} & -- & \tbd{} & \tbd{} & \tbd{} \\
+Pixels only & Kev-0.8B & 43.8 & 48.0 & 54.3 & 21.3 & 34.0 \\
+            & Kev-0.8B-FT & 62.2 & 60.5 & 58.8 & 50.4 & 88.3 \\
             & UI-Venus-1.5-2B & 78.1 & 84.6 & 61.8 & 86.8 & 35.3 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\tbd{Results paragraph: AX vs.\ pixels gap per target kind; icon accuracy; abstention; ambiguous and irreversible commands (the fine-tuned model never predicted ambiguous on validation).}
+\textbf{Results.} The AX tree matters most. With it, Kev-0.8B-FT answers 82.5\% of commands and 87.7\% of AX-kind targets; given only OCR and detector boxes, it answers 60.5\% of the same AX-kind targets, partly because 15\% of them are covered by no OCR line or detector box at all (the pixels-track list ceiling is 89.2\%). Icons are the hard case for list models: although 99.8\% of icon targets are in the pixels list, Kev-0.8B-FT picks the right one only half the time, while Venus, which reads the pixels directly, hits 86.8\%. The captions that name detector boxes, not the list itself, are the bottleneck. Venus is the stronger pixels-only system overall (78.1\% against 62.2\%) but rarely recognises absent targets (35.3\%), where the fine-tuned list model abstains correctly 88.3\% of the time with a 7.2\% (AX track) to 11.4\% (pixels track) false-abstain rate. Fine-tuning on other apps lifts Kev by 26 points on the AX track, so the gain carries over to apps it has never seen. Its confidences are usable: on the AX track 9,330 answers have confidence $\geq 0.9$, and 4.0\% of them are wrong. Accuracy on irreversible commands (73.7\%) trails the overall figure, and no baseline asks for clarification on ambiguous commands, which they answer like any other.
 
 \section{Availability and Maintenance}
 \bench{} is available at \tbd{URL (Hugging Face dataset)} with a datasheet~\cite{datasheets}, a scoring script, and the collection, selection, privacy-scan and build scripts. Labels and code are released under CC BY-NC 4.0 (data) and MIT (code) \tbd{confirm}; screenshots show Apple's interface and third-party websites, whose rights stay with their owners, and are provided for research use as in prior grounding sets. Releases are versioned; corrections reported through the repository's issue tracker go into point releases with a changelog, and test labels are never retrained on in our own work.
