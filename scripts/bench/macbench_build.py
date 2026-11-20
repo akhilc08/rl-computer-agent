@@ -80,6 +80,11 @@ def main():
     ap.add_argument("--out", default=str(ROOT / "data/macbench/v0"))
     ap.add_argument("--split", default="test", help="which app split to build from (test; val for a dev set)")
     ap.add_argument("--no_images", action="store_true")
+    ap.add_argument("--extra_apps", nargs="*", default=[], help="apps/sites from another split promoted into this "
+                    "build (v1.1: val-split sites no model was trained on)")
+    ap.add_argument("--exclude", help="file of command ids to leave out (label errors found by the cross-check)")
+    ap.add_argument("--blank_std", type=float, default=6.0, help="drop commands whose every target box is flat "
+                    "(grayscale std below this) in the screenshot: elements the window-only capture did not draw")
     ap.add_argument("--captions", default=None, help="captions_deployed.jsonl from macbench_captions.py "
                     "(default <out>/captions_deployed.jsonl); the ready-made lists need it")
     args = ap.parse_args()
@@ -95,8 +100,27 @@ def main():
         if (d / "captions.jsonl").exists():
             for c in map(json.loads, open(d / "captions.jsonl")):
                 captions[(c["screen"], c["option"])] = c["caption"]
+    keep_app = lambda a: apps.get(a) == args.split or a in args.extra_apps
+    exclude = set(open(args.exclude).read().split()) if args.exclude else set()
     cmds = [c for d in label_dirs() for c in map(json.loads, open(d / "commands.jsonl"))
-            if apps.get(screens.get(c["screen"], {}).get("app")) == args.split and c["screen"] not in drop]
+            if keep_app(screens.get(c["screen"], {}).get("app")) and c["screen"] not in drop]
+    stats0 = Counter(excluded=sum(c["id"] in exclude for c in cmds))
+    cmds = [c for c in cmds if c["id"] not in exclude]
+    import numpy as np
+    from PIL import Image
+    gray = {}
+
+    def blank(sid, boxes_px):
+        """True when every target box is flat in the screenshot (the element is in the AX tree but not drawn)."""
+        if sid not in gray:
+            gray[sid] = np.asarray(Image.open(ROOT / screens[sid]["shot"]).convert("L"), dtype=np.float32)
+        im = gray[sid]
+        for b in boxes_px:
+            x, y, w, h = (int(round(v)) for v in b)
+            crop = im[max(0, y):max(0, y + h), max(0, x):max(0, x + w)]
+            if crop.size and crop.std() >= args.blank_std:
+                return False
+        return True
 
     out = Path(args.out)
     (out / "images").mkdir(parents=True, exist_ok=True)
@@ -104,7 +128,7 @@ def main():
     deployed = {r["screen"]: r["captions"] for r in map(json.loads, open(cap_path))} if cap_path.exists() else None
     if deployed is None:
         print(f"no {cap_path}: building screens/commands only, no ready-made lists", flush=True)
-    stats = Counter()
+    stats = Counter(stats0)
     used = sorted({c["screen"] for c in cmds})
     red = {}
     with open(out / "screens.jsonl", "w") as f:
@@ -122,7 +146,7 @@ def main():
                 x["box_px"] = to_px(x["box"], frame, scale)
                 options.append(x)
             ax = [dict(t, box_px=to_px(t.get("box"), frame, scale)) for t in targets]
-            row = {"id": sid, "app": s["app"], "kind": s["kind"], "split": args.split, "title": scrub(s["title"], s["app"]),
+            row = {"id": sid, "app": s["app"], "kind": s["kind"], "split": "test" if s["app"] in args.extra_apps else args.split, "title": scrub(s["title"], s["app"]),
                    "url": scrub(s["url"], s["app"]) if s["kind"] == "web" else None, "mode": s["mode"], "screen_size": s["size"],
                    "frame": frame, "scale": scale, "img_size": s["img_size"], "capture": s["capture"],
                    "ax_poor": s["ax_poor"], "image": f"images/{sid}.jpg", "ax": ax,
@@ -158,6 +182,10 @@ def main():
             frame, scale = s["frame"], s["scale"]
             by_id = {x["id"]: x for x in r["options"]}
             boxes = [dict(tb, box_px=to_px(tb.get("box"), frame, scale)) for tb in c["target_boxes"]]
+            px = [b["box_px"] for b in boxes if b.get("box_px")]
+            if not c["absent"] and px and blank(c["screen"], px):
+                stats["dropped_target_not_drawn"] += 1
+                continue
             kinds = {t[0] for t in c["targets"]}
             # Pixels track: needs a box to click. Menu items (closed menus, no box) can't be reached from pixels alone.
             pix_ok = c["absent"] or any(b.get("box") for b in boxes)
