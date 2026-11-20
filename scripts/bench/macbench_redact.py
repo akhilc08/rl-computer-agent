@@ -56,7 +56,7 @@ def _centre_in(a, boxes):
     return any(b[0] <= cx <= b[0] + b[2] and b[1] <= cy <= b[1] + b[3] for b in boxes)
 
 
-RISKY = re.compile(r"zillow|redfin|realtor\.com|\bMLS\b|\b\d{2,6} [A-Z][a-z]+(?: [A-Z][a-z]+)* (?:St|Street|Ave|Avenue|Rd|Road|"
+RISKY = re.compile(r"zillow|craigslist|redfin|realtor\.com|\bMLS\b|\b\d{2,6} [A-Z][a-z]+(?: [A-Z][a-z]+)* (?:St|Street|Ave|Avenue|Rd|Road|"
                    r"Blvd|Dr|Drive|Ln|Lane|Ct|Court|Way|Pl|Place|Ter|Terrace|Cir|Circle)\b|\bUser:|user\?id=|\bprofile\b|"
                    r"linkedin|whitepages|spokeo|@[A-Za-z0-9_]{3,}|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}", re.I)
 # Every search-results tab is browsing history (queries can name people or places); GitHub user/profile tabs name
