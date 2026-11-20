@@ -1,0 +1,34 @@
+LibreOffice
+OBS
+darktable
+Shotcut
+Kdenlive
+QGIS
+Anki
+calibre
+OpenSCAD
+MarkText
+TeXstudio
+LMMS
+FileZilla
+Visual Studio Code
+IntelliJ IDEA CE
+Hex Fiend
+Pinta
+Sequel Ace
+Preview
+Voice Memos
+web:nih.gov
+web:nps.gov
+web:ssa.gov
+web:britannica.com
+web:merriam-webster.com
+web:w3schools.com
+web:ted.com
+web:pbs.org
+web:apnews.com
+web:theguardian.com
+web:medlineplus.gov
+web:smithsonianmag.com
+web:noaa.gov
+web:coursera.org

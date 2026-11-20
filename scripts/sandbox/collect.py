@@ -368,6 +368,7 @@ def main():
     ap.add_argument("--patience", type=int, default=20, help="steps without a new screen before moving on")
     ap.add_argument("--reseed_every", type=int, default=4, help="rounds between content reseeds")
     ap.add_argument("--only", help="file with app names / web:domain keys, one per line; collect just those")
+    ap.add_argument("--extra_sites", help="file of start URLs (one per line) added to SITES, e.g. new test sites")
     ap.add_argument("--out", default=str(ROOT / "data/sandbox" / datetime.now().strftime("%Y%m%d-%H%M%S")))
     args = ap.parse_args()
     # A hung app otherwise blocks an AX call forever (seen: 40+ min stall); set on system-wide it applies globally.
@@ -376,6 +377,8 @@ def main():
     rlca_ax.HUNG_LIMIT = 3     # and three timeouts in a row abandon the app instead of walking its whole tree
     rlca_screen.COMPOSITE = True   # screenshots show sheets, popups, menus and toolbars (window is in front here)
     only = {l.strip() for l in open(args.only) if l.strip()} if args.only else None
+    if args.extra_sites:
+        SITES.extend(u.strip() for u in open(args.extra_sites) if u.strip() and u.strip() not in SITES)
     c = Collector(args.out, args.per_app_new, args.patience)
     deadline, rnd = time.time() + args.hours * 3600, 0
     while time.time() < deadline:
