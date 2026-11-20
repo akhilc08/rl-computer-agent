@@ -47,7 +47,7 @@ A grounding benchmark for macOS. Each item gives a screenshot and a command, suc
 | Target not on screen ("none") | {kind_none} |
 | Ambiguous (should ask the user) | {ambiguous} |
 | Irreversible (send, delete, buy, ...) | {irreversible} |
-| Human-verified commands | {verified} |
+| Human-checked sample (stratified, 60 per target kind) | {verified}, all judged correct |
 
 **Apps:**
 - Native: Audio MIDI Setup, Blender, Disk Utility, Font Book, GnuCash, Godot, IINA, Journal, Keka, Krita, MuseScore 4, Music, Notes, Photo Booth, Weather.
@@ -110,6 +110,18 @@ Report:
 - calibration, if your system gives a confidence.
 
 Icon items in the ready-made lists are named by a deployed captioner (`captions_deployed.jsonl`), not by the labelling pass. The labelling pass's icon captions are in `annotations_icon_captions.jsonl`; they echo the commands, so never feed them to a system. If you use your own captioner, say so.
+
+## Baselines
+
+Element accuracy (%). List models use the ready-made lists; Venus answers with points.
+
+| Track | Model | All | AX | OCR | Icon | None |
+|---|---|---|---|---|---|---|
+| AX + pixels | Kev-0.8B | 56.6 | 63.2 | 73.3 | 18.3 | 44.9 |
+| AX + pixels | Kev-0.8B fine-tuned on our 80 training apps | 82.5 | 87.7 | 77.6 | 49.9 | 87.7 |
+| Pixels only | Kev-0.8B | 43.8 | 48.0 | 54.3 | 21.3 | 34.0 |
+| Pixels only | Kev-0.8B fine-tuned | 62.2 | 60.5 | 58.8 | 50.4 | 88.3 |
+| Pixels only | UI-Venus-1.5-2B | 78.1 | 84.6 | 61.8 | 86.8 | 35.3 |
 
 ## Privacy
 
