@@ -88,9 +88,12 @@ def risky(label):
                 or GITHUB_USER.match(label))
 
 
+BROWSERS = {"Safari", "Firefox", "Google Chrome", "Arc"}      # native browser screens show history too
+
+
 def history_label(screen, el):
     """The replacement label if this AX element shows a browsed page that points at a private person or place."""
-    if screen["kind"] != "web" or not el.get("label"):
+    if (screen["kind"] != "web" and screen["app"] not in BROWSERS) or not el.get("label"):
         return None
     ctx = " ".join(map(str, el.get("context") or [])).lower()
     if "auto-complete" in ctx or "autocomplete" in ctx:      # address-bar suggestions are search history
