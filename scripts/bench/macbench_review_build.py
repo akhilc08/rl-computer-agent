@@ -50,11 +50,17 @@ def main():
     ap.add_argument("--bench", required=True)
     ap.add_argument("--n", type=int, default=300)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--ids", help="review exactly these command ids (one per line, in this order) instead of a sample")
+    ap.add_argument("--out_name", default="review", help="folder under the bench for the page")
     args = ap.parse_args()
     bench = Path(args.bench)
     screens = {s["id"]: s for s in map(json.loads, open(bench / "screens.jsonl"))}
     cmds = [json.loads(l) for l in open(bench / "commands.jsonl")]
-    picked = sample(cmds, args.n, random.Random(args.seed))
+    if args.ids:
+        by_id = {c["id"]: c for c in cmds}
+        picked = [by_id[i] for i in open(args.ids).read().split()]
+    else:
+        picked = sample(cmds, args.n, random.Random(args.seed))
     items = []
     for c in picked:
         s = screens[c["screen"]]
@@ -64,10 +70,10 @@ def main():
                       "image": "../" + s["image"], "size": s["img_size"], "title": s.get("title"),
                       "targets": [{"id": t["id"], "role": t["role"], "label": t["label"], "box": t.get("box_px")}
                                   for t in c["target_boxes"]]})
-    out = bench / "review"
+    out = bench / args.out_name
     out.mkdir(exist_ok=True)
     (out / "items.js").write_text("window.ITEMS = " + json.dumps(items) + ";\n")
-    (out / "index.html").write_text(PAGE.replace("__KEY__", f"macbench-review-{bench.name}"))
+    (out / "index.html").write_text(PAGE.replace("__KEY__", f"macbench-{args.out_name}-{bench.name}"))
     print(len(items), "items", dict(collections.Counter(i["kind"] for i in items)),
           "apps", len({i["app"] for i in items}), "->", out / "index.html")
 
