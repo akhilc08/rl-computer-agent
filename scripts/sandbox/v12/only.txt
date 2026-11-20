@@ -1,23 +1,16 @@
-LibreOffice
-OBS
-darktable
-Shotcut
-Kdenlive
-QGIS
 Anki
 calibre
-OpenSCAD
-MarkText
-TeXstudio
-LMMS
-FileZilla
-Visual Studio Code
-IntelliJ IDEA CE
 Hex Fiend
+IntelliJ IDEA CE
+kdenlive
+OBS
 Pinta
+QGIS-final-4_2_2
 Sequel Ace
+Shotcut
+Visual Studio Code
 Preview
-Voice Memos
+VoiceMemos
 web:nih.gov
 web:nps.gov
 web:ssa.gov
