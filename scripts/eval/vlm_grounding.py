@@ -382,12 +382,18 @@ def main():
     ap.add_argument("--converted", default="data/converted")
     ap.add_argument("--out", default="runs/vlm")
     ap.add_argument("--max_pixels", type=int, default=0, help="override the model's image budget (e.g. to fit 24 GB)")
+    ap.add_argument("--repo", help="load weights from here instead of the model's hub repo (e.g. a fine-tuned merge)")
+    ap.add_argument("--kind", help="prompt/parse family to use instead of the model's own (venus for our fine-tunes)")
+    ap.add_argument("--tag", help="output folder name instead of --model")
+    ap.add_argument("--platforms", nargs="*", help="keep only these platforms (public sets)")
+    ap.add_argument("--ids_file", help="keep only command ids listed in this file (one per line)")
     ap.add_argument("--qwen_cookbook", default="~/Qwen3-VL/cookbooks", help="Qwen3-VL repo cookbooks/ (has utils/)")
     args = ap.parse_args()
     import torch
     import transformers
     from PIL import Image
     repo, kind = MODELS[args.model]
+    repo, kind = args.repo or repo, args.kind or kind
     predict, info = {"venus": venus, "qwen3vl": qwen3vl, "showui": showui, "gui_actor": gui_actor,
                      "tinyclick": tinyclick}[kind](repo, args)
     prepare = info.pop("prepare", lambda img, s: img)
@@ -414,7 +420,12 @@ def main():
             rec = ROOT / args.ids_from / f"{RECORDS[set_name]}.jsonl"
             ids = {json.loads(line)["_meta"]["id"] for line in open(rec)}
             exs = [e for e in exs if e["id"] in ids or e["id"].removeprefix(f"{set_name}-") in ids]   # weblinx ids carry the set prefix
-        out = ROOT / args.out / args.model / set_name
+        if args.platforms:
+            exs = [e for e in exs if e.get("platform") in args.platforms]
+        if args.ids_file:
+            keep_ids = set(open(args.ids_file).read().split())
+            exs = [e for e in exs if e["id"] in keep_ids]
+        out = ROOT / args.out / (args.tag or args.model) / set_name
         out.mkdir(parents=True, exist_ok=True)
         rows_path = out / "rows.jsonl"
         done = {json.loads(line)["id"] for line in open(rows_path)} if rows_path.exists() else set()
