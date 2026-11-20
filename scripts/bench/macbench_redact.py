@@ -59,6 +59,10 @@ def _centre_in(a, boxes):
 RISKY = re.compile(r"zillow|redfin|realtor\.com|\bMLS\b|\b\d{2,6} [A-Z][a-z]+(?: [A-Z][a-z]+)* (?:St|Street|Ave|Avenue|Rd|Road|"
                    r"Blvd|Dr|Drive|Ln|Lane|Ct|Court|Way|Pl|Place|Ter|Terrace|Cir|Circle)\b|\bUser:|user\?id=|\bprofile\b|"
                    r"linkedin|whitepages|spokeo|@[A-Za-z0-9_]{3,}|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}", re.I)
+# Every search-results tab is browsing history (queries can name people or places); GitHub user/profile tabs name
+# accounts. Both are treated as private in the tab strip, sidebar and suggestions.
+SEARCH_TAB = re.compile(r"\s[-–]\s(?:Google Search|Bing|DuckDuckGo|Search)\s*$", re.I)
+GITHUB_USER = re.compile(r"^[\w.-]+(?: \([^)]*\))? · GitHub\s*$")
 NAME_SEARCH = re.compile(r"^\s*([A-Z][a-z]+) ([A-Z][a-z]+(?:-[A-Z][a-z]+)?)\s+-\s+(?:Google Search|Bing|DuckDuckGo)")
 
 
@@ -80,14 +84,19 @@ def risky(label):
     if not label:
         return False
     m = NAME_SEARCH.match(label)
-    return bool(RISKY.search(label) or (m and m.group(1) in GIVEN))
+    return bool(RISKY.search(label) or (m and m.group(1) in GIVEN) or SEARCH_TAB.search(label)
+                or GITHUB_USER.match(label))
 
 
 def history_label(screen, el):
     """The replacement label if this AX element shows a browsed page that points at a private person or place."""
-    if screen["kind"] != "web" or not risky(el.get("label")):
+    if screen["kind"] != "web" or not el.get("label"):
         return None
     ctx = " ".join(map(str, el.get("context") or [])).lower()
+    if "auto-complete" in ctx or "autocomplete" in ctx:      # address-bar suggestions are search history
+        return "suggestion"
+    if not risky(el.get("label")):
+        return None
     box = el.get("box")
     if el["role"] == "AXRadioButton" and box and box[1] - screen["frame"][1] < 100 and el.get("label") != screen["title"]:
         return "tab"
