@@ -386,6 +386,7 @@ def main():
     ap.add_argument("--kind", help="prompt/parse family to use instead of the model's own (venus for our fine-tunes)")
     ap.add_argument("--tag", help="output folder name instead of --model")
     ap.add_argument("--platforms", nargs="*", help="keep only these platforms (public sets)")
+    ap.add_argument("--bench", default="data/macbench/v1", help="MacBench build for --sets macbench")
     ap.add_argument("--ids_file", help="keep only command ids listed in this file (one per line)")
     ap.add_argument("--qwen_cookbook", default="~/Qwen3-VL/cookbooks", help="Qwen3-VL repo cookbooks/ (has utils/)")
     args = ap.parse_args()
@@ -403,7 +404,7 @@ def main():
     for set_name in args.sets:
         mac_skipped = None
         if set_name == "macbench":
-            exs = macbench_examples()[: args.limit or None]
+            exs = macbench_examples(args.bench)[: args.limit or None]
             print(f"macbench: {len(exs)} examples", flush=True)
         elif set_name in MAC_SETS:
             exs, mac_skipped = mac_examples(set_name, args.ids_from or "data/records_s")
