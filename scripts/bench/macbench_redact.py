@@ -22,7 +22,8 @@ HEX_ID = re.compile(r"\b(?=[0-9A-F]*\d)[0-9A-F]{10,}\b")
 EC2 = [(re.compile(r"\bec2-user\b", re.I), "user"),
        (re.compile(r"\bip-\d+-\d+-\d+-\d+(\.ec2\.internal)?\b", re.I), "host"),
        (re.compile(r"\bec2-\d+-\d+-\d+-\d+[\w.-]*", re.I), "host"),
-       (re.compile(r"\bi-[0-9a-f]{8,17}\b"), "[ID]")]
+       (re.compile(r"\bi-[0-9a-f]{8,17}\b"), "[ID]"),
+       (re.compile(r"\bAWS Nitro[\w .-]*", re.I), "Display")]           # the cloud Mac's display name
 IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 # Invented by a labelling agent but not a reserved domain: swap for the seeded fake user.
 EMAIL_SWAP = {"kev.tester@icloud.com": "sam.rivera@example.com"}
