@@ -37,6 +37,7 @@ def main():
     ap.add_argument("--batch", type=int, default=25)
     ap.add_argument("--dup", type=float, default=0.9)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--apps", nargs="*", help="only these apps/sites (e.g. val-split sites promoted to the test set)")
     args = ap.parse_args()
     rng = random.Random(args.seed)
     screens, opts, split = sl.load()
@@ -47,7 +48,7 @@ def main():
     skipped = collections.Counter()
     pools = collections.defaultdict(list)
     for sid, s in screens.items():
-        if split.get(s["app"]) != args.split:
+        if split.get(s["app"]) != args.split or (args.apps and s["app"] not in args.apps):
             continue
         o = opts.get(sid)
         if not o or not o["options"]:
