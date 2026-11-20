@@ -129,6 +129,22 @@ def main():
     if deployed is None:
         print(f"no {cap_path}: building screens/commands only, no ready-made lists", flush=True)
     stats = Counter(stats0)
+    # A window-only capture can miss an open sheet or alert: its elements are in the AX tree but not drawn, and the
+    # window behind it is blocked, so every command on such a screen is suspect. Drop the screen.
+    SHEET = {"open", "save", "alert", "print", "export", "choose"}
+
+    def sheet_not_drawn(sid):
+        s = screens[sid]
+        if s["capture"] == "composite":
+            return False
+        hid = [t for t in s["targets"] if t.get("box") and t["source"] == "ax"
+               and SHEET & {str(c).lower() for c in (t.get("context") or [])}
+               and blank(sid, [to_px(t["box"], s["frame"], s["scale"])])]
+        return len(hid) >= 2
+    sheet_screens = {sid for sid in {c["screen"] for c in cmds} if sheet_not_drawn(sid)}
+    stats["screens_dropped_sheet_not_drawn"] = len(sheet_screens)
+    stats["dropped_sheet_screen_commands"] = sum(c["screen"] in sheet_screens for c in cmds)
+    cmds = [c for c in cmds if c["screen"] not in sheet_screens]
     used = sorted({c["screen"] for c in cmds})
     red = {}
     with open(out / "screens.jsonl", "w") as f:
