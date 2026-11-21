@@ -10,18 +10,18 @@ Following *Datasheets for Datasets* (Gebru et al., 2021).
 
 ## Composition
 
-**What do the instances represent?** Each instance is one command on one screen: a screenshot of a macOS window or a Safari page, and a natural-language command. The labels are the acceptable target elements, the action, and three flags:
+**What do the instances represent?** Each instance is one command on one screen: a screenshot of a macOS window or a web page in Safari, and a natural-language command. The labels are the acceptable target elements, the action, and three flags:
 - absent: the target is not on screen;
 - ambiguous: the command fits two or more elements with different outcomes;
 - irreversible: the action can't be undone, or other people see it.
 
 **How many?** {commands} commands on {screens} screens:
-- 23 apps and sites: 15 native, 8 web;
+- 33 apps and sites: 22 native, 11 web;
 - {kind_ax} AX targets, {kind_ocr} OCR-only targets, {kind_icon} icon-only targets, {kind_menu} menu-bar targets, {kind_none} absent;
 - {ambiguous} ambiguous and {irreversible} irreversible.
 
 **Is it a sample?** Yes.
-- The screens are 1,045 of 7,526 captured screens from the 23 test-split apps.
+- The screens are {screens} of 9,338 captured screens from the 33 held-out apps (the 23 test-split apps plus 10 never-trained validation apps).
 - They are spread evenly over apps.
 - Hard screens (accessibility-poor, or with 3+ icons only a detector finds) alternate with ordinary ones, and light mode alternates with dark.
 - Near-duplicates were removed.
@@ -63,7 +63,8 @@ Following *Datasheets for Datasets* (Gebru et al., 2021).
 
 **Who labelled it?**
 - Commands were drafted by LLM agents (Claude). The agents saw the screenshot, with detector-only boxes drawn and numbered, and the option list, and followed `tools/label_guide.txt`.
-- A human then reviewed {verified} commands.
+- A human then reviewed a stratified sample of 300 commands, all judged correct ({verified} remain after later filters).
+- A model from another family (OpenAI, via the Codex CLI) judged every command against the screenshot; 316 confirmed errors were removed.
 
 **Over what timeframe?** November 2026.
 
@@ -72,7 +73,7 @@ Following *Datasheets for Datasets* (Gebru et al., 2021).
 ## Preprocessing
 
 Every string and screenshot was scanned for emails, phone numbers, IP addresses, cloud host names, UUIDs, serial numbers, person names and faces. The fixes, all done by `scripts/bench/macbench_redact.py`:
-- Safari tab, sidebar, history and address-bar entries pointing at a private person or place were replaced with "tab" or "suggestion" and blurred.
+- Browser (Safari, Firefox) tab, sidebar, history and address-bar entries that could point at a private person or place (every search-results tab, user-profile tab and address-bar suggestion) were replaced with "tab" or "suggestion" and blurred.
 - Volume and snapshot UUIDs, cloud host names, the sandbox account name and public IPs were replaced and blurred.
 - Screens with personal profiles, a system dialog naming the collection machine, or IP-range block notices were dropped.
 
