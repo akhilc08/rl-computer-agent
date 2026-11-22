@@ -30,7 +30,7 @@ configs:
 
 A grounding benchmark for macOS. Each item gives a screenshot and a command, such as "hit the little plus at the top". The task is to pick the element to act on, or to say the target isn't on screen.
 
-- **Scale:** {commands} commands on {screens} screens. {screens_native} screens come from 22 native apps and {screens_web} from 11 websites in Safari.
+- **Scale:** {commands} commands on {screens} screens. {screens_native} screens come from 25 native apps and {screens_web} from 25 websites in Safari.
 - **Inputs:** every screen ships with its screenshot, the window's and menu bar's accessibility (AX) tree, reference OCR and reference detector boxes.
 - **Tracks:** the same commands are scored *pixels only* and *AX + pixels*.
 
@@ -48,11 +48,11 @@ A grounding benchmark for macOS. Each item gives a screenshot and a command, suc
 | Ambiguous (should ask the user) | {ambiguous} |
 | Irreversible (send, delete, buy, ...) | {irreversible} |
 | Human-checked sample (stratified, 60 per target kind) | {verified} (of 300; the rest were removed by later filters), all judged correct |
-| Cross-checked by a model from another family (OpenAI, via Codex CLI) | every command; 316 confirmed errors removed |
+| Cross-checked by a model from another family (OpenAI, via Codex CLI) | every command; 362 flagged commands removed |
 
 **Apps:**
-- Native: Audio MIDI Setup, Blender, Cyberduck, Disk Utility, Firefox, Font Book, GIMP, GnuCash, Godot, HandBrake, IINA, Journal, Keka, Krita, MuseScore 4, Music, Notes, Photo Booth, Print Center, Safari, Transmission, Weather.
-- Sites: bbc.com, bestbuy.com, gutenberg.org, irs.gov, khanacademy.org, npr.org, reddit.com, wikihow.com, wikipedia.org, ycombinator.com, youtube.com.
+- Native: Audio MIDI Setup, Blender, Cyberduck, Disk Utility, Firefox, Font Book, GIMP, GnuCash, Godot, HandBrake, Hex Fiend, IINA, Journal, Keka, Krita, MuseScore 4, Music, Notes, Photo Booth, Pinta, Print Center, Safari, Sequel Ace, Transmission, Weather.
+- Sites: apnews.com, bbc.com, bestbuy.com, britannica.com, coursera.org, gutenberg.org, irs.gov, khanacademy.org, medlineplus.gov, merriam-webster.com, nih.gov, noaa.gov, npr.org, nps.gov, pbs.org, reddit.com, smithsonianmag.com, ssa.gov, ted.com, theguardian.com, w3schools.com, wikihow.com, wikipedia.org, ycombinator.com, youtube.com.
 
 **Collection:**
 - Screens were captured on throwaway cloud Macs seeded with made-up people, notes and mail (`@example.com`, 555 numbers).
@@ -114,18 +114,18 @@ Icon items in the ready-made lists are named by a deployed captioner (`captions_
 
 ## Baselines
 
-Element accuracy (%). List models use the ready-made lists; screenshot models answer with points and are scored on a 3,644-command subset drawn at random within each target kind (ids in the code repo, `results/v1.1/screenshot_subset_ids.txt`). Fine-tuned models were trained on the 80 training apps, none of which is in MacBench.
+Element accuracy (%). List models use the ready-made lists; screenshot models answer with points and are scored on a 4,342-command subset drawn at random within each target kind (ids in the code repo, `results/v1.2/screenshot_subset_ids.txt`). Fine-tuned models were trained on the 80 training apps, none of which is in MacBench.
 
 | Track | Model | All | AX | OCR | Icon | None |
 |---|---|---|---|---|---|---|
-| AX + pixels | Kev-0.8B | 54.7 | 61.1 | 71.8 | 18.0 | 42.4 |
-| AX + pixels | Kev-0.8B fine-tuned | 81.5 | 86.6 | 76.1 | 49.8 | 87.3 |
-| Pixels only | Kev-0.8B | 46.2 | 51.8 | 52.5 | 20.9 | 34.5 |
-| Pixels only | Kev-0.8B fine-tuned | 64.9 | 64.4 | 56.6 | 49.8 | 89.6 |
-| Pixels only (subset) | Qwen3-VL-2B-Instruct | 59.9 | 69.9 | 58.9 | 53.5 | 4.7 |
-| Pixels only (subset) | Qwen3-VL-2B fine-tuned (LoRA) | 84.2 | 89.5 | 57.4 | 86.8 | 65.7 |
-| Pixels only (subset) | UI-Venus-1.5-2B | 81.6 | 89.6 | 64.3 | 87.0 | 37.0 |
-| Pixels only (subset) | UI-Venus-1.5-2B fine-tuned (LoRA) | 84.7 | 89.9 | 59.7 | 88.4 | 64.2 |
+| AX + pixels | Kev-0.8B | 53.9 | 60.8 | 70.3 | 16.8 | 40.5 |
+| AX + pixels | Kev-0.8B fine-tuned | 81.4 | 87.2 | 73.7 | 46.3 | 87.9 |
+| Pixels only | Kev-0.8B | 46.1 | 52.4 | 53.0 | 19.5 | 31.5 |
+| Pixels only | Kev-0.8B fine-tuned | 65.2 | 65.3 | 58.6 | 46.0 | 89.1 |
+| Pixels only (subset) | Qwen3-VL-2B-Instruct | 60.3 | 70.4 | 59.7 | 54.3 | 4.7 |
+| Pixels only (subset) | Qwen3-VL-2B fine-tuned (LoRA) | 84.6 | 90.0 | 58.3 | 84.9 | 66.7 |
+| Pixels only (subset) | UI-Venus-1.5-2B | 82.0 | 90.1 | 66.1 | 85.6 | 37.6 |
+| Pixels only (subset) | UI-Venus-1.5-2B fine-tuned (LoRA) | 85.3 | 90.5 | 62.7 | 87.0 | 64.9 |
 
 Code for collection, building, scoring and fine-tuning: https://github.com/akhilc08/macbench
 
@@ -139,12 +139,13 @@ Before release every string and screenshot was scanned for emails, phone numbers
 - cloud host names and the sandbox account name;
 - public IP addresses.
 
-**Removed:** screens showing personal profiles with emails, a system dialog naming the collection machine, and an adult forum page.
+**Removed:** screens showing personal profiles with emails, a system dialog naming the collection machine, an adult forum page, bot-check and error pages, and screens where another window covered the app.
 
 **Left as on the live site:** public figures in news content, public business phone numbers, and public usernames on public pages. If you find something that should not be here, open an issue and it will be removed in a point release.
 
 ## Versions
 
+- **v1.2**: 17 new held-out apps and sites (Hex Fiend, Pinta, Sequel Ace and 14 websites) from a fifth collection run; 1,583 screens (791 native / 792 web), 20,752 commands; the 46 new commands the cross-check flagged removed.
 - **v1.1**: 10 more apps and sites (moved from the never-trained validation split), 1,350 screens, 17,432 commands; screens whose sheet or toolbar was not captured and targets not drawn in the image removed; 316 commands removed after the cross-model check; stricter browser redaction.
 - **v1.0**: 1,045 screens, 14,369 commands, 23 apps and sites.
 

@@ -19,7 +19,7 @@ from PIL import Image, ImageFilter
 
 UUID = re.compile(r"\b[0-9A-Z]{8}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{12}\b", re.I)
 HEX_ID = re.compile(r"\b(?=[0-9A-F]*\d)[0-9A-F]{10,}\b")
-EC2 = [(re.compile(r"\bec2-user\b", re.I), "user"),
+EC2 = [(re.compile(r"ec2[-_]user", re.I), "user"),         # no \b: OCR can glue the path ("Userslec2-user")
        (re.compile(r"\bip-\d+-\d+-\d+-\d+(\.ec2\.internal)?\b", re.I), "host"),
        (re.compile(r"\bec2-\d+-\d+-\d+-\d+[\w.-]*", re.I), "host"),
        (re.compile(r"\bi-[0-9a-f]{8,17}\b"), "[ID]"),

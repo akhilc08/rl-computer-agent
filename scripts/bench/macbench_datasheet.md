@@ -16,12 +16,12 @@ Following *Datasheets for Datasets* (Gebru et al., 2021).
 - irreversible: the action can't be undone, or other people see it.
 
 **How many?** {commands} commands on {screens} screens:
-- 33 apps and sites: 22 native, 11 web;
+- 50 apps and sites: 25 native, 25 web;
 - {kind_ax} AX targets, {kind_ocr} OCR-only targets, {kind_icon} icon-only targets, {kind_menu} menu-bar targets, {kind_none} absent;
 - {ambiguous} ambiguous and {irreversible} irreversible.
 
 **Is it a sample?** Yes.
-- The screens are {screens} of 9,338 captured screens from the 33 held-out apps (the 23 test-split apps plus 10 never-trained validation apps).
+- The screens are {screens} of 17,878 captured screens from the 50 held-out apps (the 23 test-split apps, 10 never-trained validation apps, and 17 apps and sites collected later for the test set only).
 - They are spread evenly over apps.
 - Hard screens (accessibility-poor, or with 3+ icons only a detector finds) alternate with ordinary ones, and light mode alternates with dark.
 - Near-duplicates were removed.
@@ -63,8 +63,8 @@ Following *Datasheets for Datasets* (Gebru et al., 2021).
 
 **Who labelled it?**
 - Commands were drafted by LLM agents (Claude). The agents saw the screenshot, with detector-only boxes drawn and numbered, and the option list, and followed `tools/label_guide.txt`.
-- A human then reviewed a stratified sample of 300 commands, all judged correct ({verified} remain after later filters).
-- A model from another family (OpenAI, via the Codex CLI) judged every command against the screenshot; 316 confirmed errors were removed.
+- A human then reviewed a stratified sample of 300 commands from the first release, all judged correct ({verified} remain after later filters).
+- A model from another family (OpenAI, via the Codex CLI) judged every command against the screenshot; 362 flagged commands were removed.
 
 **Over what timeframe?** November 2026.
 
