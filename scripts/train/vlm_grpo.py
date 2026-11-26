@@ -66,6 +66,8 @@ def main():
     ap.add_argument("--rank", type=int, default=64)
     ap.add_argument("--temp", type=float, default=1.0)
     ap.add_argument("--kl", type=float, default=0.0, help="KL weight to the starting model (0 = none)")
+    ap.add_argument("--max_p_hit", type=float, default=1.0,
+                    help="train only on commands whose filter hit rate (p_hit, from vlm_rl_filter.py) is at most this")
     ap.add_argument("--lp_chunk", type=int, default=8, help="answers per log-prob forward (lower if out of memory)")
     ap.add_argument("--format_penalty", type=float, default=-0.5)
     ap.add_argument("--dev_n", type=int, default=800, help="dev commands scored at each eval (fixed sample)")
@@ -145,7 +147,7 @@ def main():
     opt = torch.optim.AdamW(params, lr=args.lr, weight_decay=0.0)
     warm = max(1, args.steps // 20)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: min(1.0, (s + 1) / warm))
-    train = load(args.data)
+    train = [c for c in load(args.data) if c.get("p_hit", 0.0) <= args.max_p_hit]
     rng.shuffle(train)
     print(f"{len(train)} train commands, {len(dev)} dev commands, {args.steps} steps x {args.batch} commands x "
           f"{args.group} samples", flush=True)
