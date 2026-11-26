@@ -66,6 +66,7 @@ def main():
     ap.add_argument("--rank", type=int, default=64)
     ap.add_argument("--temp", type=float, default=1.0)
     ap.add_argument("--kl", type=float, default=0.0, help="KL weight to the starting model (0 = none)")
+    ap.add_argument("--lp_chunk", type=int, default=8, help="answers per log-prob forward (lower if out of memory)")
     ap.add_argument("--format_penalty", type=float, default=-0.5)
     ap.add_argument("--dev_n", type=int, default=800, help="dev commands scored at each eval (fixed sample)")
     ap.add_argument("--eval_every", type=int, default=50)
@@ -149,16 +150,29 @@ def main():
     print(f"{len(train)} train commands, {len(dev)} dev commands, {args.steps} steps x {args.batch} commands x "
           f"{args.group} samples", flush=True)
 
-    def answer_logprob(enc, seq, n_prompt):
-        """Mean log-prob of one sampled answer (tokens after the prompt, through the first <|im_end|>). Only the
-        answer positions' logits are computed (logits_to_keep), not the ~3k image+prompt positions."""
-        ans = seq[n_prompt:]
-        stop = (ans == eos).nonzero()
-        ans = ans[: int(stop[0]) + 1] if len(stop) else ans
-        ids = torch.cat([enc.input_ids[0], ans])[None]
-        logits = model(input_ids=ids, attention_mask=torch.ones_like(ids), pixel_values=enc.pixel_values,
-                       image_grid_thw=enc.image_grid_thw, logits_to_keep=len(ans) + 1).logits[0, :-1].float()
-        return torch.log_softmax(logits, -1).gather(1, ans[:, None]).squeeze(1).mean()
+    pad_id = tok.pad_token_id if tok.pad_token_id is not None else eos
+
+    def answer_logprob(enc, seqs, n_prompt):
+        """Mean log-prob of each sampled answer (tokens after the prompt, through the first <|im_end|>), for a batch
+        of answers to the same prompt in one forward pass (answers right-padded and masked). Only the answer
+        positions' logits are computed (logits_to_keep), not the ~3k image+prompt positions."""
+        answers = []
+        for s in seqs:
+            a = s[n_prompt:]
+            stop = (a == eos).nonzero()
+            answers.append(a[: int(stop[0]) + 1] if len(stop) else a)
+        g, t = len(answers), max(len(a) for a in answers)
+        ans = torch.full((g, t), pad_id, dtype=torch.long, device="cuda")
+        mask = torch.zeros((g, t), device="cuda")
+        for i, a in enumerate(answers):
+            ans[i, : len(a)] = a
+            mask[i, : len(a)] = 1
+        ids = torch.cat([enc.input_ids.expand(g, -1), ans], 1)
+        att = torch.cat([enc.attention_mask.expand(g, -1), mask.long()], 1)
+        logits = model(input_ids=ids, attention_mask=att, pixel_values=enc.pixel_values.repeat(g, 1),
+                       image_grid_thw=enc.image_grid_thw.repeat(g, 1), logits_to_keep=t + 1).logits[:, :-1].float()
+        lp = torch.log_softmax(logits, -1).gather(2, ans[..., None]).squeeze(2)
+        return (lp * mask).sum(1) / mask.sum(1)
 
     best, pos = None, 0
     if args.eval_every:
@@ -166,7 +180,7 @@ def main():
         best["ckpt"] = "init"
     t0 = time.time()
     for step in range(1, args.steps + 1):
-        stats = {"reward": 0.0, "groups": 0, "skipped": 0, "unparsed": 0, "abstain": 0, "loss": 0.0}
+        stats = {"reward": 0.0, "groups": 0, "skipped": 0, "unparsed": 0, "abstain": 0, "loss": 0.0, "gen_s": 0.0, "lp_s": 0.0}
         opt.zero_grad(set_to_none=True)
         for _ in range(args.batch):
             c = train[pos % len(train)]
@@ -174,9 +188,11 @@ def main():
             enc = encode(c)
             n_prompt = enc.input_ids.shape[1]
             model.eval()
+            tg = time.time()
             with torch.no_grad():
                 seqs = model.generate(**enc, max_new_tokens=24, do_sample=True, temperature=args.temp, top_p=1.0,
                                       top_k=0, num_return_sequences=args.group)
+            stats["gen_s"] += time.time() - tg
             texts = tok.batch_decode(seqs[:, n_prompt:], skip_special_tokens=True)
             scored = [reward(t, c, args.format_penalty) for t in texts]
             rs = torch.tensor([r for r, _ in scored])
@@ -189,15 +205,19 @@ def main():
                 continue
             adv = (rs - rs.mean()) / (rs.std() + 1e-4)
             model.train()
-            for a, s in zip(adv.tolist(), seqs):          # one answer at a time: backward frees its graph
-                lp = answer_logprob(enc, s, n_prompt)
-                loss = -a * lp
+            tl = time.time()
+            adv = adv.cuda()
+            for j in range(0, len(seqs), args.lp_chunk):   # --lp_chunk answers per forward; backward frees each graph
+                lp = answer_logprob(enc, seqs[j: j + args.lp_chunk], n_prompt)
+                loss = -(adv[j: j + args.lp_chunk] * lp)
                 if args.kl:
                     with torch.no_grad(), model.disable_adapter():
-                        ref = answer_logprob(enc, s, n_prompt)
+                        ref = answer_logprob(enc, seqs[j: j + args.lp_chunk], n_prompt)
                     loss = loss + args.kl * (lp - ref)       # k1 estimate of KL(policy || start) on the answer
+                loss = loss.sum()
                 (loss / (args.batch * args.group)).backward()
                 stats["loss"] += loss.item() / (args.batch * args.group)
+            stats["lp_s"] += time.time() - tl
         torch.nn.utils.clip_grad_norm_(params, 1.0)
         opt.step()
         sched.step()
@@ -215,6 +235,10 @@ def main():
             res = evaluate(step)[0]
             if res["all"] > best["all"]:
                 best = {**res, "ckpt": ck.name}
+    if best is None:                                     # no dev evals: keep the last step
+        ck = out / f"ckpt-{args.steps}"
+        model.save_pretrained(ck)
+        best = {"step": args.steps, "ckpt": ck.name}
     (out / "best.json").write_text(json.dumps(best, indent=1))
     print("best", json.dumps(best), flush=True)
     if best["ckpt"] == "init":
